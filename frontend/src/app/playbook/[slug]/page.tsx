@@ -134,11 +134,11 @@ export default function PlaybookPage() {
 
           <div className="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-[300px]">
             {msgs.map((m, i) => (
-              <div key={i} className={`max-w-[90%] px-3 py-2.5 rounded-xl text-[13px] leading-relaxed ${
+              <div key={i} className={`max-w-[90%] px-3 py-2.5 rounded-xl text-[13px] leading-relaxed whitespace-pre-wrap ${
                 m.role === "system" ? "bg-blue-50 border border-blue-100 text-gray-600 self-start" :
                 m.role === "user" ? "bg-blue-600 text-white self-end ml-auto rounded-br-sm" :
                 "bg-gray-100 border border-gray-200 text-gray-600 self-start"
-              }`} dangerouslySetInnerHTML={{ __html: m.content }} />
+              }`}>{m.content}</div>
             ))}
             {loading && <div className="text-xs text-gray-400 italic">Analyzing...</div>}
           </div>

@@ -63,7 +63,7 @@ export default function Nav() {
               )}
               <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required
                 className="border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
-              <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6}
+              <input type="password" placeholder="Password (min 8 chars)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8}
                 className="border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
               {error && <p className="text-red-500 text-xs">{error}</p>}
               <button type="submit" className="bg-blue-600 text-white rounded-lg py-2.5 font-semibold hover:bg-blue-700">{isLogin ? "Sign In" : "Create Account"}</button>

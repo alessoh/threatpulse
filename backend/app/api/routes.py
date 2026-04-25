@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
-from datetime import datetime, timezone, timedelta
+import secrets
+import stripe as stripe_lib
+from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Header
+from sqlalchemy.orm import Session
+from sqlalchemy import func, desc
+
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.core.auth import hash_password, verify_password, create_access_token, get_current_user, require_tier
 from app.models.user import User, Threat, Playbook, Bookmark
 from app.schemas.schemas import (
@@ -19,11 +23,35 @@ router = APIRouter()
 
 
 # ══════════════════════════════════════
+# Simple in-memory rate limit for auth endpoints
+# (Replace with Redis-backed limiter for multi-instance deployments)
+# ══════════════════════════════════════
+
+_auth_attempts: dict[str, list[datetime]] = {}
+AUTH_WINDOW_SECONDS = 900  # 15 minutes
+AUTH_MAX_ATTEMPTS = 8
+
+
+def _check_auth_rate_limit(request: Request):
+    ip = request.client.host if request.client else "unknown"
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=AUTH_WINDOW_SECONDS)
+    bucket = [t for t in _auth_attempts.get(ip, []) if t > cutoff]
+    if len(bucket) >= AUTH_MAX_ATTEMPTS:
+        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    bucket.append(now)
+    _auth_attempts[ip] = bucket
+
+
+# ══════════════════════════════════════
 # AUTH
 # ══════════════════════════════════════
 
 @router.post("/auth/register", response_model=AuthResponse)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
+def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    _check_auth_rate_limit(request)
+    if len(req.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters")
     if db.query(User).filter(User.email == req.email).first():
         raise HTTPException(400, "Email already registered")
     user = User(
@@ -40,7 +68,8 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    _check_auth_rate_limit(request)
     user = db.query(User).filter(User.email == req.email).first()
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(401, "Invalid email or password")
@@ -60,6 +89,13 @@ def update_me(req: UserUpdate, user: User = Depends(get_current_user), db: Sessi
     db.commit()
     db.refresh(user)
     return UserResponse.model_validate(user)
+
+
+@router.post("/auth/api-key")
+def generate_api_key(user: User = Depends(require_tier("enterprise")), db: Session = Depends(get_db)):
+    user.api_key = "tp_" + secrets.token_urlsafe(32)
+    db.commit()
+    return {"api_key": user.api_key}
 
 
 # ══════════════════════════════════════
@@ -144,21 +180,35 @@ def get_playbook(slug: str, user: User = Depends(require_tier("pro")), db: Sessi
 
 
 # ══════════════════════════════════════
-# AI ADVISOR
+# AI ADVISOR (with free-tier rate limit)
 # ══════════════════════════════════════
+
+FREE_TIER_DAILY_LIMIT = 3
+
 
 @router.post("/advisor", response_model=AdvisorResponse)
 def ai_advisor(req: AdvisorRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Free tier: 3 per day (tracked simply via rate check)
     if user.tier == "free":
-        # Simple rate limit: could be improved with a counter table
-        pass
+        today = date.today().isoformat()
+        if user.advisor_count_date != today:
+            user.advisor_count_date = today
+            user.advisor_count_today = 0
+        if (user.advisor_count_today or 0) >= FREE_TIER_DAILY_LIMIT:
+            raise HTTPException(
+                429,
+                f"Free tier limit reached ({FREE_TIER_DAILY_LIMIT}/day). Upgrade to Pro for unlimited access.",
+            )
+        user.advisor_count_today = (user.advisor_count_today or 0) + 1
+        db.commit()
 
     threat_context = None
     if req.threat_id:
         threat = db.query(Threat).filter(Threat.id == req.threat_id).first()
         if threat:
-            threat_context = f"Threat: {threat.name}\nSeverity: {threat.severity}\nSummary: {threat.summary}\nTechnical: {threat.technical_analysis}\nAffected: {threat.affected_systems}\nIOCs: {threat.iocs}"
+            threat_context = (
+                f"Threat: {threat.name}\nSeverity: {threat.severity}\nSummary: {threat.summary}\n"
+                f"Technical: {threat.technical_analysis}\nAffected: {threat.affected_systems}\nIOCs: {threat.iocs}"
+            )
 
     response = ai_service.advisor_chat(req.message, threat_context, req.conversation_history)
     return AdvisorResponse(response=response)
@@ -169,8 +219,7 @@ def ai_advisor(req: AdvisorRequest, user: User = Depends(get_current_user), db: 
 # ══════════════════════════════════════
 
 @router.get("/search")
-def ai_search(q: str = Query(..., min_length=2), db: Session = Depends(get_db)):
-    # First try database
+def ai_search(q: str = Query(..., min_length=2, max_length=200), db: Session = Depends(get_db)):
     threats = db.query(Threat).filter(
         Threat.name.ilike(f"%{q}%") | Threat.summary.ilike(f"%{q}%") | Threat.cve_ids.ilike(f"%{q}%")
     ).limit(5).all()
@@ -178,9 +227,8 @@ def ai_search(q: str = Query(..., min_length=2), db: Session = Depends(get_db)):
     if threats:
         return {"results": [ThreatSummary.model_validate(t) for t in threats], "source": "database"}
 
-    # If nothing in DB, use AI synthesis
     try:
-        result = ai_service.synthesize_threat({"query": q, "source": "user_search"})
+        result = ai_service.synthesize_threat({"user_query": q, "source": "user_search"})
         return {"results": [result], "source": "ai"}
     except Exception as e:
         return {"results": [], "source": "error", "message": str(e)}
@@ -223,10 +271,11 @@ def list_bookmarks(user: User = Depends(get_current_user), db: Session = Depends
 
 @router.post("/subscribe/checkout", response_model=CheckoutResponse)
 def create_checkout(req: CheckoutRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    settings = get_settings()
     url = stripe_service.create_checkout_session(
         user, req.price_id,
-        success_url="https://threatpulse.io/dashboard?upgrade=success",
-        cancel_url="https://threatpulse.io/pricing",
+        success_url=f"{settings.frontend_url}/dashboard?upgrade=success",
+        cancel_url=f"{settings.frontend_url}/pricing",
     )
     db.commit()
     return CheckoutResponse(checkout_url=url)
@@ -234,9 +283,10 @@ def create_checkout(req: CheckoutRequest, user: User = Depends(get_current_user)
 
 @router.post("/subscribe/portal", response_model=PortalResponse)
 def create_portal(user: User = Depends(get_current_user)):
+    settings = get_settings()
     if not user.stripe_customer_id:
         raise HTTPException(400, "No subscription found")
-    url = stripe_service.create_portal_session(user.stripe_customer_id, "https://threatpulse.io/dashboard")
+    url = stripe_service.create_portal_session(user.stripe_customer_id, f"{settings.frontend_url}/dashboard")
     return PortalResponse(portal_url=url)
 
 
@@ -244,20 +294,35 @@ def create_portal(user: User = Depends(get_current_user)):
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
-    return stripe_service.handle_webhook_event(payload, sig, db)
+    try:
+        return stripe_service.handle_webhook_event(payload, sig, db)
+    except stripe_lib.error.SignatureVerificationError:
+        raise HTTPException(401, "Invalid Stripe webhook signature")
+    except ValueError:
+        raise HTTPException(400, "Invalid Stripe webhook payload")
+    except Exception as e:
+        print(f"[stripe webhook] {e}")
+        raise HTTPException(500, "Webhook processing error")
 
 
 # ══════════════════════════════════════
 # ENTERPRISE API (STIX format)
 # ══════════════════════════════════════
 
-@router.get("/api/v1/threats")
+def require_api_key(x_api_key: str = Header(...), db: Session = Depends(get_db)) -> User:
+    user = db.query(User).filter(User.api_key == x_api_key, User.tier == "enterprise").first()
+    if not user:
+        raise HTTPException(401, "Invalid or non-enterprise API key")
+    return user
+
+
+@router.get("/v1/threats")
 def api_threats(
     severity: Optional[str] = None,
     threat_type: Optional[str] = None,
     since: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
-    user: User = Depends(require_tier("enterprise")),
+    user: User = Depends(require_api_key),
     db: Session = Depends(get_db),
 ):
     q = db.query(Threat).filter(Threat.is_active == True)
@@ -274,7 +339,6 @@ def api_threats(
 
     threats = q.order_by(desc(Threat.last_updated)).limit(limit).all()
 
-    # Return STIX-inspired format
     return {
         "type": "bundle",
         "id": "bundle--threatpulse",

@@ -20,7 +20,7 @@ export default function DashboardPage() {
     getDashboardStats().then(setStats).catch(() => {
       setStats({ critical_count: 14, high_count: 47, active_campaigns: 23, sources_monitored: 86, critical_delta: 3, high_delta: 8 });
     });
-    getThreats({ per_page: 5 } as any).then((r) => setThreats(r.threats)).catch(() => {});
+    getThreats({ page: 1 }).then((r) => setThreats(r.threats.slice(0, 5))).catch(() => {});
   }, []);
 
   const statCards = stats ? [
