@@ -3,12 +3,18 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 venv/
+.venv/
+
+# Environment
 .env
+.env.local
+.env.*.local
 
 # Node
 node_modules/
 .next/
 out/
+.turbo/
 
 # IDE
 .vscode/
@@ -19,5 +25,8 @@ out/
 .DS_Store
 Thumbs.db
 
-# Docker
+# Build artifacts
 *.log
+dist/
+build/
+threatpulse.zip

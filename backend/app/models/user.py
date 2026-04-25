@@ -35,6 +35,8 @@ class User(Base):
     notify_high = Column(Boolean, default=True)
     notify_weekly_digest = Column(Boolean, default=True)
     api_key = Column(String(64), nullable=True, unique=True)
+    advisor_count_today = Column(Integer, default=0)
+    advisor_count_date = Column(String(10), default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

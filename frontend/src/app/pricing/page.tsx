@@ -12,13 +12,13 @@ const plans = [
   {
     name: "Professional", price: "$39", period: "/mo", desc: "Full threat intelligence for security teams and IT professionals.",
     btnLabel: "Start Pro Trial", btnStyle: "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md hover:shadow-lg",
-    featured: true, checkColor: "text-blue-600", priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO || "price_pro",
+    featured: true, checkColor: "text-blue-600", priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO || "",
     features: ["Everything in Free", "Full threat profiles & IOCs", "Complete remediation playbooks", "AI Threat Advisor (unlimited)", "Sector-specific briefings", "Real-time email alerts", "Custom alert filters"],
   },
   {
     name: "Enterprise", price: "$199", period: "/mo", desc: "Full platform access with API integration for SOCs.",
     btnLabel: "Contact Sales", btnStyle: "bg-gray-100 border border-gray-200 text-gray-800 hover:border-purple-400 hover:text-purple-600",
-    featured: false, checkColor: "text-purple-600", priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ENT || "price_enterprise",
+    featured: false, checkColor: "text-purple-600", priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ENTERPRISE || "",
     features: ["Everything in Professional", "REST API access (STIX format)", "SIEM integration guides", "Custom threat reports", "Priority alerting (15-min SLA)", "Dedicated account manager", "Team seats (up to 25)"],
   },
 ];
