@@ -10,7 +10,7 @@ from sqlalchemy import func, desc
 from app.core.database import get_db
 from app.core.config import get_settings
 from app.core.auth import hash_password, verify_password, create_access_token, get_current_user, require_tier
-from app.models.user import User, Threat, Playbook, Bookmark
+from app.models.user import User, Threat, Playbook, Bookmark, AuthAttempt, ScraperLog
 from app.schemas.schemas import (
     RegisterRequest, LoginRequest, AuthResponse, UserResponse, UserUpdate,
     ThreatSummary, ThreatDetail, ThreatListResponse, PlaybookResponse,
@@ -23,24 +23,42 @@ router = APIRouter()
 
 
 # ══════════════════════════════════════
-# Simple in-memory rate limit for auth endpoints
-# (Replace with Redis-backed limiter for multi-instance deployments)
+# Database-backed rate limit for auth endpoints.
+# Serverless platforms give each invocation fresh process memory, so the
+# window state has to live in Postgres to mean anything.
 # ══════════════════════════════════════
 
-_auth_attempts: dict[str, list[datetime]] = {}
 AUTH_WINDOW_SECONDS = 900  # 15 minutes
 AUTH_MAX_ATTEMPTS = 8
 
 
-def _check_auth_rate_limit(request: Request):
-    ip = request.client.host if request.client else "unknown"
+def _client_ip(request: Request) -> str:
+    # Vercel terminates TLS in front of the function; the connecting peer is
+    # the proxy, so the real client is in x-forwarded-for (first hop).
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:64]
+    return (request.client.host if request.client else "unknown")[:64]
+
+
+def _check_auth_rate_limit(request: Request, db: Session):
+    ip = _client_ip(request)
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(seconds=AUTH_WINDOW_SECONDS)
-    bucket = [t for t in _auth_attempts.get(ip, []) if t > cutoff]
-    if len(bucket) >= AUTH_MAX_ATTEMPTS:
+
+    db.query(AuthAttempt).filter(
+        AuthAttempt.ip == ip, AuthAttempt.attempted_at < cutoff
+    ).delete(synchronize_session=False)
+
+    recent = db.query(func.count(AuthAttempt.id)).filter(
+        AuthAttempt.ip == ip, AuthAttempt.attempted_at >= cutoff
+    ).scalar() or 0
+    if recent >= AUTH_MAX_ATTEMPTS:
+        db.commit()
         raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
-    bucket.append(now)
-    _auth_attempts[ip] = bucket
+
+    db.add(AuthAttempt(ip=ip, attempted_at=now))
+    db.commit()
 
 
 # ══════════════════════════════════════
@@ -49,7 +67,7 @@ def _check_auth_rate_limit(request: Request):
 
 @router.post("/auth/register", response_model=AuthResponse)
 def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
-    _check_auth_rate_limit(request)
+    _check_auth_rate_limit(request, db)
     if len(req.password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters")
     if db.query(User).filter(User.email == req.email).first():
@@ -69,7 +87,7 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
 
 @router.post("/auth/login", response_model=AuthResponse)
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    _check_auth_rate_limit(request)
+    _check_auth_rate_limit(request, db)
     user = db.query(User).filter(User.email == req.email).first()
     if not user or not verify_password(req.password, user.password_hash):
         raise HTTPException(401, "Invalid email or password")
@@ -119,11 +137,22 @@ def dashboard_stats(db: Session = Depends(get_db)):
         Threat.severity == "high", Threat.first_seen.between(two_weeks_ago, week_ago)
     ).scalar()
 
+    # Count sources that have actually reported a successful scrape; before
+    # the first scrape cycle, fall back to the number of configured sources.
+    sources = db.query(func.count(func.distinct(ScraperLog.source))).filter(
+        ScraperLog.status == "success"
+    ).scalar() or 0
+    if not sources:
+        from app.scrapers.collectors import RSS_FEEDS
+        from app.scrapers.agent_collectors import AGENT_RSS_FEEDS
+        # CISA KEV + NVD + GitHub advisories + NVD agent keywords + arXiv
+        sources = 5 + len(RSS_FEEDS) + len(AGENT_RSS_FEEDS)
+
     return DashboardStats(
         critical_count=critical,
         high_count=high,
         active_campaigns=active,
-        sources_monitored=86,
+        sources_monitored=sources,
         critical_delta=critical - prev_critical,
         high_delta=high - prev_high,
     )
@@ -174,8 +203,30 @@ def get_playbook(slug: str, user: User = Depends(require_tier("pro")), db: Sessi
     if not threat:
         raise HTTPException(404, "Threat not found")
     playbook = db.query(Playbook).filter(Playbook.threat_id == threat.id).first()
-    if not playbook:
-        raise HTTPException(404, "Playbook not found")
+    if playbook:
+        return PlaybookResponse.model_validate(playbook)
+
+    # Generate on first request and cache the row, so the Pro feature works
+    # for every threat without a separate generation pipeline. First hit
+    # takes ~20-40s (one Claude call); every later hit is a plain DB read.
+    try:
+        generated = ai_service.generate_playbook(threat)
+    except Exception as e:
+        print(f"[playbook] generation failed for {slug}: {e}")
+        raise HTTPException(503, "Playbook generation is temporarily unavailable. Please try again.")
+
+    playbook = Playbook(threat_id=threat.id, tier_required="pro", **generated)
+    db.add(playbook)
+    try:
+        db.commit()
+        db.refresh(playbook)
+    except Exception:
+        # A concurrent request generated it first (unique index on
+        # threat_id); serve that row instead.
+        db.rollback()
+        playbook = db.query(Playbook).filter(Playbook.threat_id == threat.id).first()
+        if not playbook:
+            raise HTTPException(503, "Playbook generation failed. Please try again.")
     return PlaybookResponse.model_validate(playbook)
 
 

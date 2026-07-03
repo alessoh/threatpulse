@@ -4,12 +4,22 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from app.core.database import SessionLocal
 from app.core.config import get_settings
 from app.scrapers.collectors import run_all_scrapers, scrape_cisa_kev, scrape_nvd_recent, scrape_rss_feed, RSS_FEEDS
+from app.scrapers.agent_collectors import run_agent_scrapers, seed_agent_threats
 
 
 def run_once():
     db = SessionLocal()
     try:
         run_all_scrapers(db)
+        run_agent_scrapers(db)
+    finally:
+        db.close()
+
+
+def run_agents():
+    db = SessionLocal()
+    try:
+        run_agent_scrapers(db)
     finally:
         db.close()
 
@@ -81,7 +91,8 @@ def seed():
     try:
         for t in seed_threats:
             upsert_threat(db, t)
-        print(f"Seeded {len(seed_threats)} threats.")
+        agent_count = seed_agent_threats(db)
+        print(f"Seeded {len(seed_threats)} conventional and {agent_count} agent threats.")
     finally:
         db.close()
 
@@ -97,6 +108,7 @@ if __name__ == "__main__":
         scheduler.add_job(run_cisa, "interval", hours=settings.scrape_cisa_interval_hours, id="cisa")
         scheduler.add_job(run_nvd, "interval", hours=settings.scrape_nvd_interval_hours, id="nvd")
         scheduler.add_job(run_rss, "interval", hours=settings.scrape_vendor_interval_hours, id="rss")
+        scheduler.add_job(run_agents, "interval", hours=settings.scrape_vendor_interval_hours, id="agents")
         scheduler.start()
     else:
         run_once()

@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     email_from: str = "alerts@threatpulse.io"
     frontend_url: str = "http://localhost:3000"
     cors_origins: str = "http://localhost:3000"
+    cron_secret: str = ""
     scrape_cisa_interval_hours: int = 1
     scrape_nvd_interval_hours: int = 4
     scrape_vendor_interval_hours: int = 12

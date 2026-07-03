@@ -99,6 +99,17 @@ class Bookmark(Base):
     threat = relationship("Threat", back_populates="bookmarks")
 
 
+class AuthAttempt(Base):
+    """Auth-endpoint attempts, persisted so rate limiting survives serverless
+    invocations (in-process memory is per-invocation on Vercel)."""
+
+    __tablename__ = "auth_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ip = Column(String(64), nullable=False, index=True)
+    attempted_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
 class AlertLog(Base):
     __tablename__ = "alert_logs"
 
