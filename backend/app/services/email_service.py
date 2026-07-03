@@ -1,7 +1,7 @@
 import html
 import resend
 from app.core.config import get_settings
-from app.models.user import User
+from app.models.user import User, AlertLog
 from sqlalchemy.orm import Session
 
 
@@ -58,7 +58,12 @@ def send_weekly_digest(user: User, digest_body: str):
 
 
 def notify_users_of_threat(db: Session, threat):
-    """Send alerts to users whose preferences match this threat."""
+    """Send alerts to users whose preferences match this threat.
+
+    Idempotent: each send is recorded in alert_logs and checked first, so a
+    re-run or retried scrape cycle never emails the same user about the same
+    threat twice.
+    """
     severity = threat.severity
     users = db.query(User).filter(User.tier.in_(["pro", "enterprise"]))
 
@@ -70,7 +75,17 @@ def notify_users_of_threat(db: Session, threat):
         return
 
     for user in users.all():
+        already_sent = db.query(AlertLog.id).filter(
+            AlertLog.user_id == user.id,
+            AlertLog.threat_id == threat.id,
+            AlertLog.alert_type == "threat_alert",
+        ).first()
+        if already_sent:
+            continue
         try:
             send_threat_alert(user, threat.name, threat.severity, threat.summary)
+            db.add(AlertLog(user_id=user.id, threat_id=threat.id, alert_type="threat_alert"))
+            db.commit()
         except Exception as e:
+            db.rollback()
             print(f"Failed to send alert to {user.email}: {e}")

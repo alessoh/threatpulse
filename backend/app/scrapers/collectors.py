@@ -18,6 +18,21 @@ def log_scrape(db: Session, source: str, status: str, found: int, new: int, erro
     db.commit()
 
 
+def already_have(db: Session, cve_id: str = "", url: str = "") -> bool:
+    """Dedup check that runs BEFORE the Claude call, keyed on stable external
+    identifiers, so scrape cycles never re-pay to synthesize a threat that is
+    already stored."""
+    if cve_id:
+        ident = cve_id.strip()
+        if ident and db.query(Threat.id).filter(Threat.cve_ids.ilike(f"%{ident}%")).first():
+            return True
+    if url:
+        u = url.strip()
+        if u and db.query(Threat.id).filter(Threat.source_urls.ilike(f"%{u}%")).first():
+            return True
+    return False
+
+
 def upsert_threat(db: Session, data: dict) -> Optional[Threat]:
     """Insert or update a threat profile. Returns the threat if new."""
     slug = slugify(data.get("name", "unknown"))
@@ -59,7 +74,7 @@ def upsert_threat(db: Session, data: dict) -> Optional[Threat]:
 
 # ── CISA Known Exploited Vulnerabilities ──
 
-def scrape_cisa_kev(db: Session) -> int:
+def scrape_cisa_kev(db: Session, limit: int = 20) -> int:
     """Scrape CISA Known Exploited Vulnerabilities catalog."""
     url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
     new_count = 0
@@ -70,7 +85,13 @@ def scrape_cisa_kev(db: Session) -> int:
         vulns = data.get("vulnerabilities", [])
         recent = [v for v in vulns if _is_recent(v.get("dateAdded", ""), days=7)]
 
-        for vuln in recent[:20]:
+        processed = 0
+        for vuln in recent:
+            if processed >= limit:
+                break
+            if already_have(db, cve_id=vuln.get("cveID", "")):
+                continue
+            processed += 1
             raw = {
                 "cve_id": vuln.get("cveID", ""),
                 "vendor": vuln.get("vendorProject", ""),
@@ -99,7 +120,7 @@ def scrape_cisa_kev(db: Session) -> int:
 
 # ── NVD Recent CVEs ──
 
-def scrape_nvd_recent(db: Session) -> int:
+def scrape_nvd_recent(db: Session, limit: int = 15) -> int:
     """Scrape NVD for recently published high-severity CVEs."""
     new_count = 0
     start = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00.000")
@@ -111,11 +132,17 @@ def scrape_nvd_recent(db: Session) -> int:
         data = resp.json()
         vulns = data.get("vulnerabilities", [])
 
-        for item in vulns[:15]:
+        processed = 0
+        for item in vulns:
             cve = item.get("cve", {})
             desc_list = cve.get("descriptions", [])
             desc = next((d["value"] for d in desc_list if d["lang"] == "en"), "")
             cve_id = cve.get("id", "")
+            if processed >= limit:
+                break
+            if already_have(db, cve_id=cve_id):
+                continue
+            processed += 1
 
             metrics = cve.get("metrics", {})
             cvss_data = metrics.get("cvssMetricV31", [{}])
@@ -147,14 +174,20 @@ def scrape_nvd_recent(db: Session) -> int:
 
 # ── RSS Feed Scraper (CISA Alerts, Vendor Blogs) ──
 
-def scrape_rss_feed(db: Session, feed_url: str, source_name: str) -> int:
+def scrape_rss_feed(db: Session, feed_url: str, source_name: str, limit: int = 10) -> int:
     """Generic RSS feed scraper for security advisories."""
     new_count = 0
     try:
         feed = feedparser.parse(feed_url)
         entries = feed.entries[:10]
 
+        processed = 0
         for entry in entries:
+            if processed >= limit:
+                break
+            if already_have(db, url=entry.get("link", "")):
+                continue
+            processed += 1
             raw = {
                 "title": entry.get("title", ""),
                 "description": entry.get("summary", entry.get("description", "")),
