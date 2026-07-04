@@ -1,6 +1,6 @@
 # ThreatPulse
 
-AI-powered cyber threat intelligence for small and mid-sized security teams — with a focus on the emerging category of **AI-agent and agent-to-agent threats** (prompt injection, MCP tool poisoning, agent worms, memory poisoning) alongside conventional vulnerabilities.
+**Threat intelligence for the age of AI agents.** ThreatPulse leads with **AI-agent and agent-to-agent threats** (prompt injection, MCP tool poisoning, agent worms, memory poisoning) — the primary feed — with conventional vulnerabilities tracked as a secondary watchlist. Every threat carries an explicit `category` (`agent` or `conventional`), set at ingestion.
 
 **Live site:** https://threatpulse.dev
 
@@ -8,9 +8,9 @@ ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated se
 
 ## Features
 
-- **Threat dashboard** — live counts of critical/high threats, active campaigns, and monitored sources, with a trending-threats feed
-- **Gemini daily insight** — a landscape briefing written by Google Gemini each day from the week's ingested threats, refreshed after every scrape
-- **Threat library** — searchable, filterable catalog of all ingested threats
+- **Agent threat dashboard** — agent-focused stat tiles, a trending feed of agent threats, and a compact conventional watchlist below it
+- **Gemini daily insight** — a landscape briefing written by Google Gemini each day from the week's ingested threats (agent threats first), refreshed after every scrape
+- **Threat library** — searchable, filterable catalog; defaults to the agent view with human-readable OWASP ASI labels, with conventional and combined views one click away
 - **Agent-threat taxonomy** — threats classified against the OWASP Agentic Top 10 (ASI01–ASI10), with attack-surface and propagation tags
 - **AI playbooks** — per-threat incident-response playbooks generated on demand and cached (Pro tier)
 - **AI advisor** — chat interface for asking questions about any threat

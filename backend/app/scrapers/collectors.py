@@ -55,6 +55,7 @@ def upsert_threat(db: Session, data: dict) -> Optional[Threat]:
         slug=slug,
         severity=data.get("severity", "medium"),
         threat_type=data.get("threat_type", "other"),
+        category=data.get("category", "conventional"),
         tags=data.get("tags", ""),
         summary=data.get("summary", ""),
         technical_analysis=data.get("technical_analysis", ""),

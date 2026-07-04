@@ -51,6 +51,11 @@ class Threat(Base):
     slug = Column(String(255), unique=True, index=True)
     severity = Column(String(20), nullable=False)
     threat_type = Column(String(50), nullable=False)
+    # "agent" for threats to/between AI agents (the product's primary focus
+    # since the agent-first pivot), "conventional" for everything else.
+    # Set at ingestion by the collectors; backfilled by migration 005.
+    category = Column(String(20), nullable=False, default="conventional",
+                      server_default="conventional", index=True)
     tags = Column(Text, default="")
     summary = Column(Text, nullable=False)
     technical_analysis = Column(Text, default="")
