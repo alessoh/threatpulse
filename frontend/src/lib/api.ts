@@ -56,6 +56,10 @@ export async function getDashboardStats() {
   return request<import("@/types").DashboardStats>("/dashboard/stats");
 }
 
+export async function getDailyInsight() {
+  return request<import("@/types").DailyInsight>("/dashboard/insight");
+}
+
 // ── Threats ──
 
 export async function getThreats(params: {

@@ -50,11 +50,19 @@ def cron_scrape_all(db: Session = Depends(get_db)):
         results[f"rss:{name}"] = _safe(lambda u=url, n=name: scrape_rss_feed(db, u, n, limit=RSS_BATCH_PER_FEED))
     results["agent_threats"] = _safe(lambda: run_agent_scrapers(db))
 
+    # Refresh the Gemini daily insight so the dashboard briefing reflects
+    # this run's new threats. No-op when GEMINI_API_KEY is unset.
+    from app.services.insight_service import get_or_create_daily_insight
+
+    insight = _safe(lambda: get_or_create_daily_insight(db, force=True))
+    insight_status = "refreshed" if getattr(insight, "content", None) else "skipped"
+
     return {
         "status": "ok",
         "started": started.isoformat(),
         "finished": datetime.now(timezone.utc).isoformat(),
         "new_threats": results,
+        "daily_insight": insight_status,
     }
 
 

@@ -158,6 +158,22 @@ def dashboard_stats(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/dashboard/insight")
+def dashboard_insight(db: Session = Depends(get_db)):
+    """Today's Gemini-generated landscape briefing. Returns insight=null when
+    Gemini is not configured, so the frontend can fall back to static text."""
+    from app.services.insight_service import get_or_create_daily_insight
+
+    row = get_or_create_daily_insight(db)
+    if row is None:
+        return {"insight": None, "generated_at": None, "model": None}
+    return {
+        "insight": row.content,
+        "generated_at": row.created_at.isoformat() if row.created_at else None,
+        "model": row.model,
+    }
+
+
 # ══════════════════════════════════════
 # THREATS
 # ══════════════════════════════════════

@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 1440
     anthropic_api_key: str = ""
     anthropic_model: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = ""
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     stripe_price_pro: str = ""
