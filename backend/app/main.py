@@ -3,8 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.api.cron import router as cron_router
 from app.core.config import get_settings
+from app.core.database import ensure_threat_category_column
 
 settings = get_settings()
+
+# Self-healing schema guard for the agent-first pivot (see the function's
+# docstring). Never raises; logs and continues if the database is unreachable.
+ensure_threat_category_column()
 
 app = FastAPI(
     title="ThreatPulse API",

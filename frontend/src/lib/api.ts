@@ -56,18 +56,24 @@ export async function getDashboardStats() {
   return request<import("@/types").DashboardStats>("/dashboard/stats");
 }
 
+export async function getDailyInsight() {
+  return request<import("@/types").DailyInsight>("/dashboard/insight");
+}
+
 // ── Threats ──
 
 export async function getThreats(params: {
   page?: number;
   severity?: string;
   threat_type?: string;
+  category?: string;
   search?: string;
 } = {}) {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.severity) qs.set("severity", params.severity);
   if (params.threat_type) qs.set("threat_type", params.threat_type);
+  if (params.category) qs.set("category", params.category);
   if (params.search) qs.set("search", params.search);
   return request<import("@/types").ThreatListResponse>(`/threats?${qs}`);
 }

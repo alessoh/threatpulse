@@ -151,6 +151,9 @@ def upsert_agent_threat(db: Session, data: dict, identifier: str = "",
                     "tags"):
             if data.get(key):
                 setattr(existing, key, data[key])
+        # A hit from the agent pipeline means the item is agent-relevant,
+        # even if a conventional collector ingested the same CVE first.
+        existing.category = "agent"
         existing.last_updated = datetime.now(timezone.utc)
         db.commit()
         return None
@@ -160,6 +163,7 @@ def upsert_agent_threat(db: Session, data: dict, identifier: str = "",
         slug=slug,
         severity=data.get("severity", "medium"),
         threat_type=data.get("threat_type", "other"),
+        category="agent",
         tags=data.get("tags", ""),
         summary=data.get("summary", ""),
         technical_analysis=data.get("technical_analysis", ""),
@@ -335,12 +339,12 @@ def scrape_arxiv_agent_security(db: Session, max_results: int = 10) -> int:
     new_count = 0
     found = 0
     url = (
-        "http://export.arxiv.org/api/query?search_query="
+        "https://export.arxiv.org/api/query?search_query="
         + quote(ARXIV_QUERY)
         + f"&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
     )
     try:
-        resp = httpx.get(url, timeout=30)
+        resp = httpx.get(url, timeout=30, follow_redirects=True)
         resp.raise_for_status()
         feed = feedparser.parse(resp.text)
         for entry in feed.entries:

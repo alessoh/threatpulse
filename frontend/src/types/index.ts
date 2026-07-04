@@ -21,6 +21,7 @@ export interface Threat {
   slug: string;
   severity: "critical" | "high" | "medium" | "low";
   threat_type: string;
+  category: "agent" | "conventional";
   tags: string;
   summary: string;
   cvss_score: number | null;
@@ -53,6 +54,16 @@ export interface DashboardStats {
   sources_monitored: number;
   critical_delta: number;
   high_delta: number;
+  agent_count: number;
+  agent_critical_count: number;
+  agent_new_week: number;
+  conventional_count: number;
+}
+
+export interface DailyInsight {
+  insight: string | null;
+  generated_at: string | null;
+  model: string | null;
 }
 
 export interface Playbook {

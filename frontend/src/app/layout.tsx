@@ -4,8 +4,9 @@ import { AuthProvider } from "@/lib/auth";
 import Nav from "@/components/ui/Nav";
 
 export const metadata: Metadata = {
-  title: "ThreatPulse — AI Cyber Threat Intelligence",
-  description: "AI-powered threat intelligence for small and mid-sized security teams",
+  title: "ThreatPulse — Threat intelligence for the age of AI agents",
+  description:
+    "Agent-first threat intelligence: prompt injection, MCP tool poisoning, agent worms, and framework CVEs explained in plain English — with conventional vulnerabilities on the watchlist.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

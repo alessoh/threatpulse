@@ -33,7 +33,44 @@ migrations.
 
 ## Step 2: Run migrations and seed data (from your laptop, once)
 
-In a terminal, from the repository root:
+**Windows (PowerShell)** — from the repository root:
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# Use the DIRECT (non-pooler) connection string here:
+$env:DATABASE_URL = "postgresql://...direct connection string..."
+# Generate a secret. Keep this value! You reuse it in Step 3.
+$env:JWT_SECRET = python -c "import secrets; print(secrets.token_hex(32))"
+echo $env:JWT_SECRET
+
+alembic upgrade head
+python -m app.scrapers.run --seed
+```
+
+If PowerShell refuses to run `Activate.ps1` ("running scripts is disabled"),
+either run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use
+Command Prompt (cmd) instead:
+
+```bat
+cd backend
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+
+set DATABASE_URL=postgresql://...direct connection string...
+python -c "import secrets; print(secrets.token_hex(32))"
+rem Copy the printed value, then:
+set JWT_SECRET=paste-the-printed-value-here
+
+alembic upgrade head
+python -m app.scrapers.run --seed
+```
+
+**Mac/Linux (bash)** — from the repository root:
 
 ```bash
 cd backend
@@ -66,10 +103,11 @@ works.
    | Name | Value |
    |---|---|
    | `DATABASE_URL` | the **pooled** connection string from Step 1 |
-   | `JWT_SECRET` | the value from Step 2 (or `openssl rand -hex 32`) |
-   | `CRON_SECRET` | generate another: `openssl rand -hex 32` |
+   | `JWT_SECRET` | the value from Step 2 (or generate a new one, see below) |
+   | `CRON_SECRET` | generate another one the same way |
    | `ANTHROPIC_API_KEY` | your key from console.anthropic.com |
-   | `FRONTEND_URL` | your frontend URL, e.g. `https://threatpulse.vercel.app` |
+   | `GEMINI_API_KEY` | (optional) from aistudio.google.com — enables the Gemini daily insight |
+   | `FRONTEND_URL` | your frontend URL, e.g. `https://threatpulse.dev` |
    | `CORS_ORIGINS` | same value as `FRONTEND_URL` |
    | `RESEND_API_KEY` | (optional) from resend.com |
    | `EMAIL_FROM` | (optional) a verified sender, e.g. `alerts@yourdomain.com` |
@@ -78,9 +116,12 @@ works.
    | `STRIPE_PRICE_PRO` | (optional) Stripe Price ID |
    | `STRIPE_PRICE_ENTERPRISE` | (optional) Stripe Price ID |
 
+   To generate a secret on Windows: `python -c "import secrets; print(secrets.token_hex(32))"`
+   (on Mac/Linux, `openssl rand -hex 32` also works).
+
 4. Click **Deploy**. When it finishes, note the URL, e.g.
-   `https://threatpulse-api.vercel.app`.
-5. Test it: open `https://threatpulse-api.vercel.app/health` in your browser.
+   `https://api.threatpulse.dev`.
+5. Test it: open `https://api.threatpulse.dev/health` in your browser.
    You should see `{"status":"ok","service":"threatpulse-api"}`.
 
 `CRON_SECRET` matters: Vercel automatically sends it as a Bearer token when
@@ -90,7 +131,7 @@ it invokes the cron routes, and the routes reject any request without it.
 
 1. Open your **existing frontend project** in the Vercel dashboard.
 2. Go to **Settings → Environment Variables** and set:
-   - `NEXT_PUBLIC_API_URL` = `https://threatpulse-api.vercel.app`
+   - `NEXT_PUBLIC_API_URL` = `https://api.threatpulse.dev`
    - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = your `pk_...` key (optional)
 3. Go to **Deployments** and click **Redeploy** on the latest deployment
    (env vars are baked in at build time for `NEXT_PUBLIC_*`).
@@ -107,11 +148,30 @@ backend project's **Settings → Cron Jobs** after deploying):
 - `/api/cron/weekly-digest` — Mondays at 09:00 UTC: AI-written digest email
   to Pro/Enterprise subscribers (idempotent; safe to re-run).
 
-To trigger a scrape immediately instead of waiting for the schedule:
+To trigger a scrape immediately instead of waiting for the schedule —
+Windows (PowerShell; note the `.exe`, which bypasses PowerShell's built-in
+`curl` alias):
+
+```powershell
+curl.exe -H "Authorization: Bearer YOUR_CRON_SECRET" https://api.threatpulse.dev/api/cron/scrape-all
+```
+
+Or with a native PowerShell command:
+
+```powershell
+Invoke-RestMethod -Uri "https://api.threatpulse.dev/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
+```
+
+If `curl.exe` fails with `schannel ... CRYPT_E_NO_REVOCATION_CHECK`, your
+network is blocking Windows' certificate-revocation lookup. Use the
+`Invoke-RestMethod` version above, or add `--ssl-no-revoke` after
+`curl.exe` (the certificate itself is still verified).
+
+Mac/Linux:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://threatpulse-api.vercel.app/api/cron/scrape-all
+  https://api.threatpulse.dev/api/cron/scrape-all
 ```
 
 **Plan note:** the Hobby plan allows limited, roughly daily cron jobs. If
@@ -123,7 +183,7 @@ curl the endpoints hourly using the same header.
 ## Step 6: Stripe webhook (only if you use payments)
 
 1. Go to **dashboard.stripe.com → Developers → Webhooks → Add endpoint**.
-2. URL: `https://threatpulse-api.vercel.app/api/webhook/stripe`
+2. URL: `https://api.threatpulse.dev/api/webhook/stripe`
 3. Events: `checkout.session.completed`,
    `customer.subscription.updated`, `customer.subscription.deleted`.
 4. Copy the signing secret into the backend project's
@@ -131,7 +191,7 @@ curl the endpoints hourly using the same header.
 
 ## Step 7: Final checklist
 
-- [ ] `https://threatpulse-api.vercel.app/health` returns ok
+- [ ] `https://api.threatpulse.dev/health` returns ok
 - [ ] Frontend dashboard shows the 10 seeded threats
 - [ ] You can register and log in
 - [ ] `curl` to `/api/cron/scrape-all` with the secret returns a JSON report

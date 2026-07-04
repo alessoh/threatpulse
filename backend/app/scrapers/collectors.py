@@ -55,6 +55,7 @@ def upsert_threat(db: Session, data: dict) -> Optional[Threat]:
         slug=slug,
         severity=data.get("severity", "medium"),
         threat_type=data.get("threat_type", "other"),
+        category=data.get("category", "conventional"),
         tags=data.get("tags", ""),
         summary=data.get("summary", ""),
         technical_analysis=data.get("technical_analysis", ""),
@@ -123,8 +124,11 @@ def scrape_cisa_kev(db: Session, limit: int = 20) -> int:
 def scrape_nvd_recent(db: Session, limit: int = 15) -> int:
     """Scrape NVD for recently published high-severity CVEs."""
     new_count = 0
-    start = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00.000")
-    url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate={start}&cvssV3Severity=CRITICAL"
+    # NVD rejects requests that set pubStartDate without pubEndDate (404)
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00.000")
+    end = now.strftime("%Y-%m-%dT%H:%M:%S.000")
+    url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate={start}&pubEndDate={end}&cvssV3Severity=CRITICAL"
 
     try:
         resp = httpx.get(url, timeout=60, headers={"Accept": "application/json"})
