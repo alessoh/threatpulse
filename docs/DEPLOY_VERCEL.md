@@ -106,7 +106,7 @@ works.
    | `JWT_SECRET` | the value from Step 2 (or generate a new one, see below) |
    | `CRON_SECRET` | generate another one the same way |
    | `ANTHROPIC_API_KEY` | your key from console.anthropic.com |
-   | `FRONTEND_URL` | your frontend URL, e.g. `https://threatpulse.vercel.app` |
+   | `FRONTEND_URL` | your frontend URL, e.g. `https://threatpulse.dev` |
    | `CORS_ORIGINS` | same value as `FRONTEND_URL` |
    | `RESEND_API_KEY` | (optional) from resend.com |
    | `EMAIL_FROM` | (optional) a verified sender, e.g. `alerts@yourdomain.com` |
@@ -119,8 +119,8 @@ works.
    (on Mac/Linux, `openssl rand -hex 32` also works).
 
 4. Click **Deploy**. When it finishes, note the URL, e.g.
-   `https://threatpulse-api.vercel.app`.
-5. Test it: open `https://threatpulse-api.vercel.app/health` in your browser.
+   `https://api.threatpulse.dev`.
+5. Test it: open `https://api.threatpulse.dev/health` in your browser.
    You should see `{"status":"ok","service":"threatpulse-api"}`.
 
 `CRON_SECRET` matters: Vercel automatically sends it as a Bearer token when
@@ -130,7 +130,7 @@ it invokes the cron routes, and the routes reject any request without it.
 
 1. Open your **existing frontend project** in the Vercel dashboard.
 2. Go to **Settings → Environment Variables** and set:
-   - `NEXT_PUBLIC_API_URL` = `https://threatpulse-api.vercel.app`
+   - `NEXT_PUBLIC_API_URL` = `https://api.threatpulse.dev`
    - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` = your `pk_...` key (optional)
 3. Go to **Deployments** and click **Redeploy** on the latest deployment
    (env vars are baked in at build time for `NEXT_PUBLIC_*`).
@@ -152,13 +152,13 @@ Windows (PowerShell; note the `.exe`, which bypasses PowerShell's built-in
 `curl` alias):
 
 ```powershell
-curl.exe -H "Authorization: Bearer YOUR_CRON_SECRET" https://threatpulse-api.vercel.app/api/cron/scrape-all
+curl.exe -H "Authorization: Bearer YOUR_CRON_SECRET" https://api.threatpulse.dev/api/cron/scrape-all
 ```
 
 Or with a native PowerShell command:
 
 ```powershell
-Invoke-RestMethod -Uri "https://threatpulse-api.vercel.app/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
+Invoke-RestMethod -Uri "https://api.threatpulse.dev/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
 ```
 
 If `curl.exe` fails with `schannel ... CRYPT_E_NO_REVOCATION_CHECK`, your
@@ -170,7 +170,7 @@ Mac/Linux:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
-  https://threatpulse-api.vercel.app/api/cron/scrape-all
+  https://api.threatpulse.dev/api/cron/scrape-all
 ```
 
 **Plan note:** the Hobby plan allows limited, roughly daily cron jobs. If
@@ -182,7 +182,7 @@ curl the endpoints hourly using the same header.
 ## Step 6: Stripe webhook (only if you use payments)
 
 1. Go to **dashboard.stripe.com → Developers → Webhooks → Add endpoint**.
-2. URL: `https://threatpulse-api.vercel.app/api/webhook/stripe`
+2. URL: `https://api.threatpulse.dev/api/webhook/stripe`
 3. Events: `checkout.session.completed`,
    `customer.subscription.updated`, `customer.subscription.deleted`.
 4. Copy the signing secret into the backend project's
@@ -190,7 +190,7 @@ curl the endpoints hourly using the same header.
 
 ## Step 7: Final checklist
 
-- [ ] `https://threatpulse-api.vercel.app/health` returns ok
+- [ ] `https://api.threatpulse.dev/health` returns ok
 - [ ] Frontend dashboard shows the 10 seeded threats
 - [ ] You can register and log in
 - [ ] `curl` to `/api/cron/scrape-all` with the secret returns a JSON report
