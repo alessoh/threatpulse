@@ -137,6 +137,19 @@ def dashboard_stats(db: Session = Depends(get_db)):
         Threat.severity == "high", Threat.first_seen.between(two_weeks_ago, week_ago)
     ).scalar()
 
+    agent_active = db.query(func.count(Threat.id)).filter(
+        Threat.category == "agent", Threat.is_active == True
+    ).scalar() or 0
+    agent_critical = db.query(func.count(Threat.id)).filter(
+        Threat.category == "agent", Threat.severity == "critical", Threat.is_active == True
+    ).scalar() or 0
+    agent_new_week = db.query(func.count(Threat.id)).filter(
+        Threat.category == "agent", Threat.first_seen >= week_ago
+    ).scalar() or 0
+    conventional_active = db.query(func.count(Threat.id)).filter(
+        Threat.category == "conventional", Threat.is_active == True
+    ).scalar() or 0
+
     # Count sources that have actually reported a successful scrape; before
     # the first scrape cycle, fall back to the number of configured sources.
     sources = db.query(func.count(func.distinct(ScraperLog.source))).filter(
@@ -155,6 +168,10 @@ def dashboard_stats(db: Session = Depends(get_db)):
         sources_monitored=sources,
         critical_delta=critical - prev_critical,
         high_delta=high - prev_high,
+        agent_count=agent_active,
+        agent_critical_count=agent_critical,
+        agent_new_week=agent_new_week,
+        conventional_count=conventional_active,
     )
 
 
@@ -184,6 +201,7 @@ def list_threats(
     per_page: int = Query(20, ge=1, le=100),
     severity: Optional[str] = None,
     threat_type: Optional[str] = None,
+    category: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
@@ -193,6 +211,8 @@ def list_threats(
         q = q.filter(Threat.severity == severity)
     if threat_type:
         q = q.filter(Threat.threat_type == threat_type)
+    if category in ("agent", "conventional"):
+        q = q.filter(Threat.category == category)
     if search:
         q = q.filter(Threat.name.ilike(f"%{search}%") | Threat.summary.ilike(f"%{search}%"))
 
@@ -387,6 +407,7 @@ def require_api_key(x_api_key: str = Header(...), db: Session = Depends(get_db))
 def api_threats(
     severity: Optional[str] = None,
     threat_type: Optional[str] = None,
+    category: Optional[str] = None,
     since: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
     user: User = Depends(require_api_key),
@@ -397,6 +418,8 @@ def api_threats(
         q = q.filter(Threat.severity == severity)
     if threat_type:
         q = q.filter(Threat.threat_type == threat_type)
+    if category in ("agent", "conventional"):
+        q = q.filter(Threat.category == category)
     if since:
         try:
             since_dt = datetime.fromisoformat(since)
@@ -418,6 +441,7 @@ def api_threats(
                 "pattern_type": "threatpulse",
                 "severity": t.severity,
                 "threat_type": t.threat_type,
+                "category": t.category,
                 "iocs": t.iocs,
                 "cvss_score": t.cvss_score,
                 "cve_ids": t.cve_ids,

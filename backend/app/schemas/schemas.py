@@ -50,6 +50,7 @@ class ThreatSummary(BaseModel):
     slug: str
     severity: str
     threat_type: str
+    category: str = "conventional"  # "agent" | "conventional"
     tags: str
     summary: str
     cvss_score: Optional[float]
@@ -123,3 +124,9 @@ class DashboardStats(BaseModel):
     sources_monitored: int
     critical_delta: int
     high_delta: int
+    # Agent-first pivot: the dashboard leads with these; the fields above are
+    # kept so older clients and the /v1 API keep working unchanged.
+    agent_count: int = 0
+    agent_critical_count: int = 0
+    agent_new_week: int = 0
+    conventional_count: int = 0

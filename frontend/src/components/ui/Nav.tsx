@@ -34,7 +34,7 @@ export default function Nav() {
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-lg flex items-center justify-center text-white text-sm font-bold">T</div>
-            <Link href="/dashboard" className="text-lg font-bold tracking-tight">ThreatPulse</Link>
+            <Link href="/" className="text-lg font-bold tracking-tight">ThreatPulse</Link>
           </div>
           <div className="flex items-center gap-1">
             <Link href="/dashboard" className="px-3 py-1.5 text-sm text-gray-600 hover:text-blue-600 rounded-md hover:bg-gray-50">Dashboard</Link>
