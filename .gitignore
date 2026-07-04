@@ -30,3 +30,6 @@ Thumbs.db
 dist/
 build/
 threatpulse.zip
+
+# Local notes that may contain credentials — never commit
+threatpulseParameters.txt

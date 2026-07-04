@@ -5,8 +5,31 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.models.user import Threat, ScraperLog
-from app.services.ai_service import synthesize_threat
+from app.services.ai_service import synthesize_threat, synthesize_agent_threat
 from app.services.email_service import notify_users_of_threat
+
+
+def synthesize_by_relevance(raw: dict) -> dict:
+    """Agent-relevance gate for generic feed items.
+
+    Items from the conventional sources (CISA KEV, NVD, security news) that
+    show an AI-agent security angle are synthesized with the agent taxonomy
+    and categorized "agent", so they surface in the primary feed regardless
+    of which scraper found them. Everything else takes the classic path.
+    Falls back to classic synthesis if the agent path fails, so the gate can
+    never lose an item.
+    """
+    from app.scrapers.agent_collectors import is_agent_relevant
+
+    gate_text = " ".join(str(v) for v in raw.values())
+    if is_agent_relevant(gate_text):
+        try:
+            profile = synthesize_agent_threat(raw)
+            profile["category"] = "agent"
+            return profile
+        except Exception as exc:
+            print(f"[gate] agent synthesis failed, using classic path: {exc}")
+    return synthesize_threat(raw)
 
 
 def slugify(text: str) -> str:
@@ -104,7 +127,7 @@ def scrape_cisa_kev(db: Session, limit: int = 20) -> int:
                 "source": "CISA KEV",
             }
             try:
-                synthesized = synthesize_threat(raw)
+                synthesized = synthesize_by_relevance(raw)
                 synthesized["source_urls"] = f"https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
                 threat = upsert_threat(db, synthesized)
                 if threat:
@@ -159,7 +182,7 @@ def scrape_nvd_recent(db: Session, limit: int = 15) -> int:
                 "source": "NVD",
             }
             try:
-                synthesized = synthesize_threat(raw)
+                synthesized = synthesize_by_relevance(raw)
                 synthesized["cve_ids"] = cve_id
                 synthesized["cvss_score"] = cvss_score
                 synthesized["source_urls"] = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
@@ -200,7 +223,7 @@ def scrape_rss_feed(db: Session, feed_url: str, source_name: str, limit: int = 1
                 "source": source_name,
             }
             try:
-                synthesized = synthesize_threat(raw)
+                synthesized = synthesize_by_relevance(raw)
                 synthesized["source_urls"] = entry.get("link", "")
                 threat = upsert_threat(db, synthesized)
                 if threat:

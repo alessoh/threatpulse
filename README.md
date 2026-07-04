@@ -4,7 +4,7 @@
 
 **Live site:** https://threatpulse.dev
 
-ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated security feeds daily, uses Claude to turn each raw item into a plain-English threat profile with severity, taxonomy tags, and remediation guidance, and presents everything through a dashboard, searchable library, AI-generated response playbooks, and a chat advisor.
+ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated security-research feeds (Simon Willison, Embrace The Red, OWASP GenAI, Unit 42, PortSwigger Research, Schneier on Security), uses Claude to turn each raw item into a plain-English threat profile with severity, taxonomy tags, and remediation guidance, and presents everything through a dashboard, searchable library, AI-generated response playbooks, and a chat advisor. Agent sources are rescanned every 6 hours; everything else daily.
 
 ## Features
 
@@ -14,7 +14,8 @@ ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated se
 - **Agent-threat taxonomy** — threats classified against the OWASP Agentic Top 10 (ASI01–ASI10), with attack-surface and propagation tags
 - **AI playbooks** — per-threat incident-response playbooks generated on demand and cached (Pro tier)
 - **AI advisor** — chat interface for asking questions about any threat
-- **Automated collection** — daily scrape via Vercel Cron; deduplication by CVE ID / source URL before any AI call
+- **Automated collection** — full scrape daily via Vercel Cron, plus agent sources every 6 hours via a GitHub Actions schedule; deduplication by CVE ID / source URL before any AI call
+- **Agent-relevance gate** — generic items from CISA/NVD/security news that show an AI-agent angle (MCP, prompt injection, agent frameworks) are routed through the agent taxonomy and land in the primary agent feed
 - **Accounts & billing** — JWT auth, Free/Pro/Enterprise tiers via Stripe
 - **Email** — weekly AI-written digest for subscribers via Resend
 
