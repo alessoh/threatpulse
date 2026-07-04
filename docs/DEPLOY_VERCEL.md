@@ -161,6 +161,11 @@ Or with a native PowerShell command:
 Invoke-RestMethod -Uri "https://threatpulse-api.vercel.app/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
 ```
 
+If `curl.exe` fails with `schannel ... CRYPT_E_NO_REVOCATION_CHECK`, your
+network is blocking Windows' certificate-revocation lookup. Use the
+`Invoke-RestMethod` version above, or add `--ssl-no-revoke` after
+`curl.exe` (the certificate itself is still verified).
+
 Mac/Linux:
 
 ```bash
