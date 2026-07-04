@@ -75,13 +75,27 @@ def _call_gemini(prompt: str) -> str:
         params={"key": settings.gemini_api_key},
         json={
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 1000, "temperature": 0.6},
+            # Gemini 2.5's internal "thinking" tokens count against
+            # maxOutputTokens, so the budget must be far larger than the
+            # visible briefing; thinkingBudget 0 disables thinking on Flash
+            # (unsupported values on other models raise, which the caller
+            # catches and falls back from).
+            "generationConfig": {
+                "maxOutputTokens": 4096,
+                "temperature": 0.6,
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
         },
         timeout=30,
     )
     resp.raise_for_status()
     data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    candidate = data["candidates"][0]
+    text = candidate["content"]["parts"][0]["text"].strip()
+    # A briefing cut off mid-sentence is worse than the static fallback.
+    if candidate.get("finishReason") == "MAX_TOKENS":
+        raise RuntimeError("Gemini reply truncated (finishReason=MAX_TOKENS)")
+    return text
 
 
 def _recent_threat_block(db: Session, days: int = 7, limit: int = 15) -> str:
