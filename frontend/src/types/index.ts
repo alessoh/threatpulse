@@ -55,6 +55,12 @@ export interface DashboardStats {
   high_delta: number;
 }
 
+export interface DailyInsight {
+  insight: string | null;
+  generated_at: string | null;
+  model: string | null;
+}
+
 export interface Playbook {
   id: number;
   threat_id: number;

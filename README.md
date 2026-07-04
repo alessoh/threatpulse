@@ -9,6 +9,7 @@ ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated se
 ## Features
 
 - **Threat dashboard** — live counts of critical/high threats, active campaigns, and monitored sources, with a trending-threats feed
+- **Gemini daily insight** — a landscape briefing written by Google Gemini each day from the week's ingested threats, refreshed after every scrape
 - **Threat library** — searchable, filterable catalog of all ingested threats
 - **Agent-threat taxonomy** — threats classified against the OWASP Agentic Top 10 (ASI01–ASI10), with attack-surface and propagation tags
 - **AI playbooks** — per-threat incident-response playbooks generated on demand and cached (Pro tier)
@@ -24,7 +25,7 @@ ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated se
 | Frontend | Next.js 14, React 18, TypeScript, Tailwind CSS |
 | Backend | FastAPI (Python), SQLAlchemy, Alembic |
 | Database | PostgreSQL (Neon in production) |
-| AI | Anthropic Claude (`claude-sonnet-5` by default; override with `ANTHROPIC_MODEL`) |
+| AI | Anthropic Claude for threat synthesis (`claude-sonnet-5`; override with `ANTHROPIC_MODEL`) + Google Gemini for the daily insight (`gemini-2.5-flash`; override with `GEMINI_MODEL`) |
 | Hosting | Vercel (two projects: frontend + serverless backend), Vercel Cron for scraping |
 | Payments / Email | Stripe, Resend (both optional) |
 
@@ -112,6 +113,8 @@ Mac/Linux: same steps with `source .venv/bin/activate` and `export VAR=value`.
 | `JWT_SECRET` | ✅ | Signing key for auth tokens (app refuses to boot with the default) |
 | `ANTHROPIC_API_KEY` | ✅ | Claude API access for threat synthesis |
 | `ANTHROPIC_MODEL` | — | Override the Claude model (default `claude-sonnet-5`) |
+| `GEMINI_API_KEY` | — | Google Gemini key for the daily dashboard insight (falls back to static text without it) |
+| `GEMINI_MODEL` | — | Override the Gemini model (default `gemini-2.5-flash`) |
 | `CRON_SECRET` | prod | Bearer token protecting the cron endpoints |
 | `FRONTEND_URL` / `CORS_ORIGINS` | prod | Frontend origin for redirects and CORS |
 | `NEXT_PUBLIC_API_URL` | ✅ (frontend) | Backend URL, baked in at build time |
@@ -153,7 +156,8 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://api.threatpulse.dev/api
 
 ### In progress / planned 🚧
 
-- [ ] Dashboard polish: AI-generated daily insight (currently static), computed source counts, honest delta arrows, last-scrape timestamp
+- [x] Gemini-generated daily insight on the dashboard (cached per day, refreshed after each scrape)
+- [ ] Dashboard polish: computed source counts, honest delta arrows, last-scrape timestamp
 - [ ] Dedicated agent-threats view with human-readable ASI tag labels
 - [ ] Email alerts for new critical threats (Resend)
 - [ ] End-to-end Stripe checkout and tier gating

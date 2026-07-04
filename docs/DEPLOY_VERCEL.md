@@ -106,6 +106,7 @@ works.
    | `JWT_SECRET` | the value from Step 2 (or generate a new one, see below) |
    | `CRON_SECRET` | generate another one the same way |
    | `ANTHROPIC_API_KEY` | your key from console.anthropic.com |
+   | `GEMINI_API_KEY` | (optional) from aistudio.google.com — enables the Gemini daily insight |
    | `FRONTEND_URL` | your frontend URL, e.g. `https://threatpulse.dev` |
    | `CORS_ORIGINS` | same value as `FRONTEND_URL` |
    | `RESEND_API_KEY` | (optional) from resend.com |
