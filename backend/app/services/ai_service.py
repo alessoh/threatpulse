@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
 
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 def get_client() -> anthropic.Anthropic:

@@ -33,7 +33,44 @@ migrations.
 
 ## Step 2: Run migrations and seed data (from your laptop, once)
 
-In a terminal, from the repository root:
+**Windows (PowerShell)** — from the repository root:
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# Use the DIRECT (non-pooler) connection string here:
+$env:DATABASE_URL = "postgresql://...direct connection string..."
+# Generate a secret. Keep this value! You reuse it in Step 3.
+$env:JWT_SECRET = python -c "import secrets; print(secrets.token_hex(32))"
+echo $env:JWT_SECRET
+
+alembic upgrade head
+python -m app.scrapers.run --seed
+```
+
+If PowerShell refuses to run `Activate.ps1` ("running scripts is disabled"),
+either run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or use
+Command Prompt (cmd) instead:
+
+```bat
+cd backend
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -r requirements.txt
+
+set DATABASE_URL=postgresql://...direct connection string...
+python -c "import secrets; print(secrets.token_hex(32))"
+rem Copy the printed value, then:
+set JWT_SECRET=paste-the-printed-value-here
+
+alembic upgrade head
+python -m app.scrapers.run --seed
+```
+
+**Mac/Linux (bash)** — from the repository root:
 
 ```bash
 cd backend
@@ -66,8 +103,8 @@ works.
    | Name | Value |
    |---|---|
    | `DATABASE_URL` | the **pooled** connection string from Step 1 |
-   | `JWT_SECRET` | the value from Step 2 (or `openssl rand -hex 32`) |
-   | `CRON_SECRET` | generate another: `openssl rand -hex 32` |
+   | `JWT_SECRET` | the value from Step 2 (or generate a new one, see below) |
+   | `CRON_SECRET` | generate another one the same way |
    | `ANTHROPIC_API_KEY` | your key from console.anthropic.com |
    | `FRONTEND_URL` | your frontend URL, e.g. `https://threatpulse.vercel.app` |
    | `CORS_ORIGINS` | same value as `FRONTEND_URL` |
@@ -77,6 +114,9 @@ works.
    | `STRIPE_WEBHOOK_SECRET` | (optional) after Step 6 |
    | `STRIPE_PRICE_PRO` | (optional) Stripe Price ID |
    | `STRIPE_PRICE_ENTERPRISE` | (optional) Stripe Price ID |
+
+   To generate a secret on Windows: `python -c "import secrets; print(secrets.token_hex(32))"`
+   (on Mac/Linux, `openssl rand -hex 32` also works).
 
 4. Click **Deploy**. When it finishes, note the URL, e.g.
    `https://threatpulse-api.vercel.app`.
@@ -107,7 +147,26 @@ backend project's **Settings → Cron Jobs** after deploying):
 - `/api/cron/weekly-digest` — Mondays at 09:00 UTC: AI-written digest email
   to Pro/Enterprise subscribers (idempotent; safe to re-run).
 
-To trigger a scrape immediately instead of waiting for the schedule:
+To trigger a scrape immediately instead of waiting for the schedule —
+Windows (PowerShell; note the `.exe`, which bypasses PowerShell's built-in
+`curl` alias):
+
+```powershell
+curl.exe -H "Authorization: Bearer YOUR_CRON_SECRET" https://threatpulse-api.vercel.app/api/cron/scrape-all
+```
+
+Or with a native PowerShell command:
+
+```powershell
+Invoke-RestMethod -Uri "https://threatpulse-api.vercel.app/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
+```
+
+If `curl.exe` fails with `schannel ... CRYPT_E_NO_REVOCATION_CHECK`, your
+network is blocking Windows' certificate-revocation lookup. Use the
+`Invoke-RestMethod` version above, or add `--ssl-no-revoke` after
+`curl.exe` (the certificate itself is still verified).
+
+Mac/Linux:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_CRON_SECRET" \

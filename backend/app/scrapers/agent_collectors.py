@@ -335,12 +335,12 @@ def scrape_arxiv_agent_security(db: Session, max_results: int = 10) -> int:
     new_count = 0
     found = 0
     url = (
-        "http://export.arxiv.org/api/query?search_query="
+        "https://export.arxiv.org/api/query?search_query="
         + quote(ARXIV_QUERY)
         + f"&sortBy=submittedDate&sortOrder=descending&max_results={max_results}"
     )
     try:
-        resp = httpx.get(url, timeout=30)
+        resp = httpx.get(url, timeout=30, follow_redirects=True)
         resp.raise_for_status()
         feed = feedparser.parse(resp.text)
         for entry in feed.entries:
