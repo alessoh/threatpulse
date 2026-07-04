@@ -2,7 +2,7 @@
 
 AI-powered cyber threat intelligence for small and mid-sized security teams — with a focus on the emerging category of **AI-agent and agent-to-agent threats** (prompt injection, MCP tool poisoning, agent worms, memory poisoning) alongside conventional vulnerabilities.
 
-**Live site:** https://threatpulse-one.vercel.app
+**Live site:** https://threatpulse.dev
 
 ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated security feeds daily, uses Claude to turn each raw item into a plain-English threat profile with severity, taxonomy tags, and remediation guidance, and presents everything through a dashboard, searchable library, AI-generated response playbooks, and a chat advisor.
 
@@ -127,12 +127,12 @@ To trigger a scrape manually in production:
 
 ```powershell
 # Windows PowerShell
-Invoke-RestMethod -Uri "https://<your-api>.vercel.app/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
+Invoke-RestMethod -Uri "https://api.threatpulse.dev/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
 ```
 
 ```bash
 # Mac/Linux
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://<your-api>.vercel.app/api/cron/scrape-all
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://api.threatpulse.dev/api/cron/scrape-all
 ```
 
 ## Progress
@@ -149,10 +149,10 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://<your-api>.vercel.app/a
 - [x] JWT auth with bcrypt and database-backed rate limiting
 - [x] Idempotent alert/digest sends via `alert_logs`
 - [x] Fixed in production: retired Claude model replacement, NVD collector 404, arXiv collector redirect
+- [x] Custom domain: [threatpulse.dev](https://threatpulse.dev) + api.threatpulse.dev
 
 ### In progress / planned 🚧
 
-- [ ] Custom domain
 - [ ] Dashboard polish: AI-generated daily insight (currently static), computed source counts, honest delta arrows, last-scrape timestamp
 - [ ] Dedicated agent-threats view with human-readable ASI tag labels
 - [ ] Email alerts for new critical threats (Resend)
