@@ -1,70 +1,172 @@
-# ThreatPulse: Repository Review and a Pivot Toward Agent-to-Agent Threats
+# ThreatPulse
 
-## What ThreatPulse is today
+AI-powered cyber threat intelligence for small and mid-sized security teams — with a focus on the emerging category of **AI-agent and agent-to-agent threats** (prompt injection, MCP tool poisoning, agent worms, memory poisoning) alongside conventional vulnerabilities.
 
-ThreatPulse is a working, well-organized skeleton of a threat-intelligence SaaS product. A FastAPI backend pulls vulnerability data from CISA's Known Exploited Vulnerabilities catalog, NVD, and a handful of security RSS feeds, sends each raw item to Claude for structuring into a plain-English threat profile, and stores the result in PostgreSQL. A Next.js frontend presents that data through a dashboard, a searchable library, per-threat playbook pages, and an AI chat advisor. Stripe handles Free, Pro, and Enterprise subscriptions, Resend delivers email alerts and a weekly digest, and an APScheduler loop re-runs the collectors on a timer. The whole thing is roughly fourteen hundred lines of backend Python and five hundred lines of frontend TypeScript, wrapped in Docker Compose with an unusually thorough setup README.
+**Live site:** https://threatpulse-one.vercel.app
 
-The bones are genuinely good. Authentication uses JWTs with bcrypt password hashing and an in-memory rate limiter on the auth routes. The AI service is careful about untrusted input, wrapping scraped content in a `<raw_data>` block and instructing the model to treat that content as data rather than instructions, which is exactly the right instinct. Secrets are externalized to environment variables, the app refuses to boot with a default JWT secret, and email output is HTML-escaped before sending. This is a competent foundation rather than a throwaway prototype, and the review below is written in that spirit: what would it take to make it fully real, and how would you turn it toward the emerging problem of agents attacking other agents.
+ThreatPulse scrapes CISA, NVD, GitHub Security Advisories, arXiv, and curated security feeds daily, uses Claude to turn each raw item into a plain-English threat profile with severity, taxonomy tags, and remediation guidance, and presents everything through a dashboard, searchable library, AI-generated response playbooks, and a chat advisor.
 
-I cloned the repository, read every source file, and verified the new code I am proposing by wiring it into a copy of the actual backend and running it against the real database models. Where I make a claim about the code, it is because I read it or ran it, not because I assumed it.
+## Features
 
-## Where the current implementation is thin
+- **Threat dashboard** — live counts of critical/high threats, active campaigns, and monitored sources, with a trending-threats feed
+- **Threat library** — searchable, filterable catalog of all ingested threats
+- **Agent-threat taxonomy** — threats classified against the OWASP Agentic Top 10 (ASI01–ASI10), with attack-surface and propagation tags
+- **AI playbooks** — per-threat incident-response playbooks generated on demand and cached (Pro tier)
+- **AI advisor** — chat interface for asking questions about any threat
+- **Automated collection** — daily scrape via Vercel Cron; deduplication by CVE ID / source URL before any AI call
+- **Accounts & billing** — JWT auth, Free/Pro/Enterprise tiers via Stripe
+- **Email** — weekly AI-written digest for subscribers via Resend
 
-Several features described in the README are scaffolded but not actually wired up, and a few pieces have correctness or cost problems that will bite in production. These are the gaps worth closing before the product could be called fully implemented.
+## Architecture
 
-The most visible gap is that **playbooks are never generated**. The database has a `Playbook` table and the API has a `GET /threats/{slug}/playbook` route gated behind the Pro tier, but nothing anywhere in the codebase ever creates a `Playbook` row. Every request to that endpoint returns a 404, which means the single most important paid feature, the thing the pricing page implies Pro subscribers are buying, does not exist yet. Either the collectors need a second AI pass that writes a playbook when a high-severity threat is created, or the playbook route needs to synthesize on demand and cache the result.
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14, React 18, TypeScript, Tailwind CSS |
+| Backend | FastAPI (Python), SQLAlchemy, Alembic |
+| Database | PostgreSQL (Neon in production) |
+| AI | Anthropic Claude (`claude-sonnet-5` by default; override with `ANTHROPIC_MODEL`) |
+| Hosting | Vercel (two projects: frontend + serverless backend), Vercel Cron for scraping |
+| Payments / Email | Stripe, Resend (both optional) |
 
-The **AI synthesis pass is fragile and expensive in ways that compound**. Every scraped item triggers a Claude call before the code checks whether that item is already in the database, so each scrape cycle re-synthesizes threats it already has and pays for the tokens again. The deduplication happens only after the model has already run, keyed on a slug derived from the model-generated name, so the same CVE arriving from both NVD and an RSS feed can produce two different rows because the two synthesis passes named it differently. On top of that, the JSON parsing assumes the model returns clean JSON and calls `json.loads` directly inside the loop; a single malformed reply throws, and while the surrounding `try/except` prevents a crash, it silently drops the threat with only a printed line. There is no retry and no validation that `severity` or `threat_type` are among the allowed values, so a hallucinated category flows straight into the database and breaks the frontend's filtering.
+```
+threatpulse/
+├── frontend/          # Next.js app (dashboard, library, playbooks, pricing)
+├── backend/
+│   ├── app/
+│   │   ├── api/       # REST routes + cron endpoints
+│   │   ├── core/      # config, database, auth
+│   │   ├── models/    # SQLAlchemy models
+│   │   ├── scrapers/  # conventional + agent-threat collectors
+│   │   └── services/  # AI synthesis, email, Stripe, digest
+│   └── alembic/       # database migrations
+├── docs/DEPLOY_VERCEL.md  # step-by-step production deployment guide
+└── docker-compose.yml     # local development stack
+```
 
-The **weekly digest and alert plumbing has a dead table**. There is an `AlertLog` model intended to record which alerts were sent to whom, but nothing writes to it. That means there is no idempotency on alerts: if the scraper runs twice, or restarts mid-cycle, Pro and Enterprise users get duplicate emails for the same threat, because the code has no memory of what it already sent. For an alerting product, duplicate-suppression is not a nice-to-have.
+## Installation (local development)
 
-A few **operational details are stubbed**. The dashboard reports `sources_monitored=86` as a hardcoded constant regardless of how many sources actually exist. The scheduler runs as a single blocking process with no locking, so running two scraper instances (which the deploy guide's "second Railway service" section actively encourages) would double every API call and every alert. The auth rate limiter and the digest both keep state in memory, which silently breaks the moment you run more than one backend instance. None of these are hard to fix, but each is a place where the current code assumes a single machine and a single process.
+### Prerequisites
 
-Finally, there is **no test suite and essentially no observability**. There are no unit tests, no integration tests, and no structured logging beyond `print` statements. The `ScraperLog` table captures per-run success and error counts, which is a good start, but nothing surfaces it. For a product whose whole value is freshness and accuracy of data, the absence of any automated check on the synthesis output is the riskiest gap of all.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows, Mac, or Linux)
+- An [Anthropic API key](https://console.anthropic.com) (required for threat synthesis)
+- Stripe and Resend keys (optional — payments and email are disabled without them)
 
-## Recommendations for a fuller conventional implementation
+### Quick start with Docker
 
-If the goal were simply to finish ThreatPulse as a conventional CVE-intelligence product, the priority order would be: generate playbooks so the paid tier delivers something, move deduplication in front of the AI call and key it on stable identifiers like the CVE ID so you stop paying twice and stop creating duplicates, add validation and a single retry around the JSON synthesis so bad model output is caught rather than silently dropped, write to the `AlertLog` table and check it before sending so alerts are idempotent, and replace the in-memory rate limiter and scheduler state with Redis or a database so the app can run more than one instance. Underneath all of that, a modest test suite around the synthesis and dedup logic would convert "seems to work" into "verified to work." These changes are incremental and none of them require rearchitecting anything.
+```bash
+git clone https://github.com/alessoh/threatpulse.git
+cd threatpulse
 
-But finishing ThreatPulse as another CVE feed is the less interesting option, because the market it describes is crowded and the data it resells is largely commoditized. The more compelling move is to point the same machinery at a problem that barely has any tooling yet.
+# Create your environment file
+cp .env.example .env   # if no example file exists, create .env with the variables below
+```
 
-## Why pivot to agent-to-agent threats
+Minimum `.env` contents:
 
-The security landscape shifted decisively over the past year. In December 2025, OWASP published its first formal Top 10 for Agentic Applications, cataloging risks that are specific to autonomous AI agents: goal hijacking, tool misuse, identity and privilege abuse, agentic supply-chain compromise, unexpected code execution, memory and context poisoning, insecure inter-agent communication, cascading failures, human-agent trust exploitation, and rogue agents. These are not hypotheticals. The Model Context Protocol, introduced by Anthropic in late 2024 and now the de facto standard for connecting agents to tools, has already accumulated a substantial vulnerability history. The `mcp-remote` OAuth proxy, downloaded over four hundred thousand times, carried a critical command-injection flaw (CVE-2025-6514) that let a malicious server execute code on any connecting developer's machine. Anthropic's own MCP Inspector shipped an unauthenticated proxy (CVE-2025-49596, CVSS 9.4) that a malicious web page could reach to run code on a developer's host. Researchers have logged over thirty disclosures and ten CVEs across the MCP ecosystem, and tool-poisoning attacks, where malicious instructions are hidden inside a tool's description and read by the model before any human approves anything, achieve success rates above eighty percent against agents with auto-approval enabled.
+```env
+ANTHROPIC_API_KEY=sk-ant-...
+JWT_SECRET=any-long-random-string
+```
 
-This is precisely the kind of fast-moving, poorly-consolidated threat surface that ThreatPulse's architecture was built to digest. The value proposition writes itself: a small or mid-sized organization now deploying LangChain agents, MCP servers, or multi-agent pipelines has essentially nowhere to turn for plain-English, prioritized intelligence about which agent framework just shipped a critical CVE, which MCP server pattern is being actively exploited, and what to do about it. The conventional CVE feeds barely cover this space, and the academic literature that does cover it is unreadable for a non-specialist. ThreatPulse already does the one thing that closes that gap, which is take messy source material and have Claude turn it into something a busy defender can act on. Pointing that capability at agent threats turns a me-too product into a first-mover in a category that did not meaningfully exist eighteen months ago.
+Then start everything:
 
-The pivot is also cheap, because the existing data model absorbs it almost unchanged. A threat is a threat: it has a name, a severity, a type, an affected-systems field, indicators, and remediation steps. Agent threats fit that shape. What changes is the taxonomy of `threat_type`, the sources you scrape, and the framing of the language the model produces.
+```bash
+docker-compose up
+```
 
-## What the pivot looks like concretely
+This launches Postgres, the FastAPI backend (with migrations applied automatically), the Next.js frontend, and a scraper worker.
 
-The shift has three layers, and I have written and tested working code for the two that matter most.
+- Frontend: http://localhost:3000
+- API: http://localhost:8000 (interactive docs at http://localhost:8000/docs)
 
-The **first layer is the threat taxonomy**. The current `threat_type` values (ransomware, apt, zero-day, and so on) describe a world of network intrusions. The agent world needs its own vocabulary: goal hijacking, prompt injection, tool poisoning, tool misuse, identity spoofing, privilege abuse, supply-chain compromise, code execution, memory poisoning, insecure inter-agent communication, cascading failure, human-trust exploitation, rogue agents, protocol vulnerabilities, framework vulnerabilities, resource exhaustion, data exfiltration, and self-propagating agent worms. I mapped each of these to the corresponding OWASP Agentic Top 10 identifier so the output speaks the language security teams are standardizing on. Crucially, these values all fit inside the existing `threat_type` column, so adopting them requires no database migration at all. Two new dimensions, the attack surface (tool layer, memory, planner, model, inter-agent communication, protocol, human interface, supply chain) and the propagation mode (none, single-hop, or self-propagating, which flags worm-like threats), are folded into the existing tags field for now and can graduate to first-class columns later.
+### Seed demo data
 
-The **second layer is the sources**. Instead of CISA and NVD's general firehose, the agent-focused collector watches the places where agent threats actually surface: GitHub Security Advisories filtered to a watchlist of agent frameworks and MCP packages (LangChain, LangGraph, LlamaIndex, CrewAI, AutoGen, the MCP SDK, `mcp-remote`, and their npm equivalents), NVD keyword searches for MCP and prompt-injection CVEs, the arXiv cs.CR feed for new multi-agent and injection research, and a curated set of researcher blogs that break this news first. I wrote this collector to fix the deduplication problem at the same time, so it checks whether an advisory or CVE is already stored before spending a Claude call on it, and it keys that check on the stable external identifier rather than the model-generated name.
+```bash
+docker-compose exec backend python -m app.scrapers.run --seed
+```
 
-The **third layer is the framing**, which is the smallest code change and the largest change in what the product feels like. The synthesis prompt and the advisor's system prompt are rewritten to make Claude an AI-agent-security analyst rather than a generic threat analyst, so a scraped MCP advisory comes back explaining the tool-poisoning mechanism, which frameworks are exposed, whether it can propagate between agents, and what a defender should do, all in the same plain language the original product used for ransomware. The detection guidance is written defensively, describing the patterns that indicate an attack rather than reproducing working payloads.
+This loads 10 real, documented threats (5 conventional, 5 agent-focused) so the dashboard is populated immediately.
 
-## The code, and how it was verified
+### Run without Docker (backend only)
 
-I am providing two complete, tested Python files. Per your instructions these are whole files, not snippets, written to drop into the existing structure with minimal wiring.
+Windows (PowerShell):
 
-**`ai_service.py`** is a full replacement for `backend/app/services/ai_service.py`. It keeps every original function (`synthesize_threat`, `advisor_chat`, `generate_weekly_digest`) so nothing that currently imports it breaks, and it adds `synthesize_agent_threat`, which produces an agent-aware threat profile validated against the new taxonomy. Along the way it fixes the reliability problems in the original: JSON parsing now tolerates markdown fences and stray prose, a single corrective retry handles a malformed first reply, and a Pydantic model clamps severity, threat type, attack surface, and propagation to known values so a hallucinated category can never reach the database. It also reads the model name from settings with a safe fallback instead of hardcoding it in three places.
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:DATABASE_URL = "postgresql://user:pass@host:5432/threatpulse"
+$env:JWT_SECRET = python -c "import secrets; print(secrets.token_hex(32))"
+alembic upgrade head
+uvicorn app.main:app --reload
+```
 
-**`agent_collectors.py`** is a new module for `backend/app/scrapers/`. It implements the four agent-threat collectors described above, deduplicates before calling the model so scrape cycles stop re-paying for synthesis, honors an optional NVD API key with rate-limit-respecting delays, and ships with five seed threats drawn from real, publicly documented incidents (MCP tool poisoning, the `mcp-remote` and MCP Inspector CVEs, cross-agent prompt infection, and agent memory poisoning) so the dashboard demonstrates the pivot immediately after seeding.
+Mac/Linux: same steps with `source .venv/bin/activate` and `export VAR=value`.
 
-To verify this is not just plausible-looking code, I copied the real repository backend into a working directory, dropped both files into place, pointed the app at a SQLite database using the project's actual SQLAlchemy models, and ran an integration test covering twenty-four cases. The tests confirm that the JSON extractor handles clean, fenced, and prose-wrapped model replies; that validation clamps every out-of-range field instead of raising or storing garbage; that the profile maps cleanly onto the exact set of columns the `Threat` table defines; that seeding the five agent threats twice produces five rows rather than ten, proving the deduplication works; that the identifier-based and URL-based dedup checks both fire correctly; and that every new taxonomy value fits within the existing column width. All twenty-four checks pass. The two files compile and run against the real schema.
+## Configuration
 
-What I did **not** do is run the collectors against the live GitHub, NVD, and arXiv endpoints, because that requires network access to those services and, for GitHub's advisory API at useful rates, a token. The collector code is written against those APIs' documented response shapes, but the field mappings should be confirmed against live responses before production, and the researcher-feed URLs should each be fetched once to confirm they are still valid, since publishers move them. I want to be clear about that boundary: the data-handling, validation, deduplication, and storage logic is tested end to end; the external HTTP calls are written correctly to spec but not exercised against the real services.
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Postgres connection string |
+| `JWT_SECRET` | ✅ | Signing key for auth tokens (app refuses to boot with the default) |
+| `ANTHROPIC_API_KEY` | ✅ | Claude API access for threat synthesis |
+| `ANTHROPIC_MODEL` | — | Override the Claude model (default `claude-sonnet-5`) |
+| `CRON_SECRET` | prod | Bearer token protecting the cron endpoints |
+| `FRONTEND_URL` / `CORS_ORIGINS` | prod | Frontend origin for redirects and CORS |
+| `NEXT_PUBLIC_API_URL` | ✅ (frontend) | Backend URL, baked in at build time |
+| `RESEND_API_KEY` / `EMAIL_FROM` | — | Email alerts and weekly digest |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_*` | — | Subscriptions |
+| `NVD_API_KEY` | — | Higher NVD rate limits for the collectors |
 
-## A suggested path forward
+## Deployment
 
-If this direction appeals to you, the sequence that gets there with the least wasted motion is roughly this. Start by dropping in the two files and wiring `run_agent_scrapers` into `run.py` alongside or in place of the existing scrapers, then seed the agent threats and confirm they render. That alone reframes the product. Next, close the playbook gap, because it is the paid feature and it is currently empty, ideally by having the agent collector generate a playbook whenever it creates a high-severity threat. Then make alerts idempotent by writing to and checking the `AlertLog` table, and move the rate-limiter and scheduler state out of process memory so the app can scale past one instance. Somewhere in there, add a small test suite around synthesis and deduplication so the data quality that is the entire point of the product is actually guarded. The frontend needs only light relabeling to match, since a threat card renders the same whether the threat is ransomware or tool poisoning; the taxonomy filters and the dashboard copy are the main touch points.
+The full production setup — Neon Postgres, two Vercel projects, cron jobs, Stripe webhooks, and Windows-friendly commands throughout — is documented step by step in **[docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md)**.
 
-The larger strategic point is that ThreatPulse already solved the hard engineering problem, which is turning noisy security source material into clear, prioritized, actionable guidance with an AI in the loop. That capability is wasted on commodity CVE data that a dozen vendors already resell. Aimed at agent-to-agent threats, where the danger is real, the pace is fast, the incidents are already piling up, and almost nobody is producing readable intelligence for the teams standing up agents, the same machinery becomes something genuinely useful and genuinely early. The pivot costs far less than the original build did, and it moves the product from a crowded category into an open one.
+To trigger a scrape manually in production:
 
-## Files delivered alongside this review
+```powershell
+# Windows PowerShell
+Invoke-RestMethod -Uri "https://<your-api>.vercel.app/api/cron/scrape-all" -Headers @{ Authorization = "Bearer YOUR_CRON_SECRET" }
+```
 
-- `ai_service.py` — drop-in replacement for the existing AI service, adding validated agent-threat synthesis and fixing JSON-handling reliability. Tested against the real models.
-- `agent_collectors.py` — new agent-threat collector module with pre-synthesis deduplication and five real-incident seed threats. Tested against the real models.
+```bash
+# Mac/Linux
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://<your-api>.vercel.app/api/cron/scrape-all
+```
+
+## Progress
+
+### Done ✅
+
+- [x] Full-stack app deployed on Vercel (frontend + serverless FastAPI backend)
+- [x] Neon Postgres with migrations and seed data
+- [x] Daily automated scraping via Vercel Cron (CISA KEV, NVD, security RSS, GitHub advisories, arXiv, researcher blogs)
+- [x] Claude-powered threat synthesis with JSON validation, retry, and taxonomy clamping
+- [x] Deduplication before AI calls (by CVE ID / source URL) to control cost
+- [x] Agent-threat taxonomy aligned with OWASP Agentic Top 10
+- [x] On-demand, cached AI playbooks
+- [x] JWT auth with bcrypt and database-backed rate limiting
+- [x] Idempotent alert/digest sends via `alert_logs`
+- [x] Fixed in production: retired Claude model replacement, NVD collector 404, arXiv collector redirect
+
+### In progress / planned 🚧
+
+- [ ] Custom domain
+- [ ] Dashboard polish: AI-generated daily insight (currently static), computed source counts, honest delta arrows, last-scrape timestamp
+- [ ] Dedicated agent-threats view with human-readable ASI tag labels
+- [ ] Email alerts for new critical threats (Resend)
+- [ ] End-to-end Stripe checkout and tier gating
+- [ ] Faster scraping cadence (GitHub Actions hourly trigger)
+- [ ] Test suite around synthesis and deduplication
+- [ ] Structured logging / observability
+
+## Contact
+
+- **Author:** Harry Peter Alesso
+- **GitHub:** [@alessoh](https://github.com/alessoh)
+- **Issues & feature requests:** [GitHub Issues](https://github.com/alessoh/threatpulse/issues)
+
+## License
+
+[MIT](LICENSE) © 2026 Harry Peter Alesso
