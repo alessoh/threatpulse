@@ -1,0 +1,3 @@
+MERGE
+
+For future reference, the pattern is: the merge button only appears on a pull request's page, so the flow is always push branch → open pull request → merge button appears at the bottom of that PR. When I say "say the word and I'll open the PR," that's me doing steps one and two so all that's left for you is the green button.
