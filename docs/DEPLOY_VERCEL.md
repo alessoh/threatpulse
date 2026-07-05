@@ -174,11 +174,32 @@ curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
   https://api.threatpulse.dev/api/cron/scrape-all
 ```
 
-**Plan note:** the Hobby plan allows limited, roughly daily cron jobs. If
-you upgrade to Vercel Pro you can add more schedules to
-`backend/vercel.json` — e.g. run `/api/cron/scrape-agents` every 6 hours —
-and redeploy. Alternatively, a free GitHub Actions scheduled workflow can
-curl the endpoints hourly using the same header.
+### Faster agent-scrape cadence (GitHub Actions, free)
+
+The Hobby plan allows only daily cron jobs, and both slots are used. The
+repo therefore ships `.github/workflows/agent-scrape.yml`, which triggers
+`/api/cron/scrape-agents` at 00:00, 12:00, and 18:00 UTC (06:00 is covered
+by Vercel's daily `scrape-all`), so agent sources are scanned four times a
+day in total. One-time setup:
+
+1. On GitHub: repo **Settings → Secrets and variables → Actions → New
+   repository secret**.
+2. Name: `CRON_SECRET`. Value: the same `CRON_SECRET` the backend project
+   uses on Vercel.
+3. Done — the schedule activates on its own; you can also run it on demand
+   from the **Actions** tab ("Agent-threat scrape" → Run workflow).
+
+Until the secret is set, the workflow runs but exits politely without
+calling the API, so there is no failure noise.
+
+**Optional:** an `NVD_API_KEY` env var on the backend project (free from
+https://nvd.nist.gov/developers/request-an-api-key) shortens the NVD
+keyword scan from ~63s to ~18s per run, which keeps the agent cron well
+inside the function's time limit as more keywords are added.
+
+If you upgrade to Vercel Pro you can instead add the schedule to
+`backend/vercel.json` — e.g. `{ "path": "/api/cron/scrape-agents",
+"schedule": "0 0,12,18 * * *" }` — and delete the workflow.
 
 ## Step 6: Stripe webhook (only if you use payments)
 

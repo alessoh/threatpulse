@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     scrape_cisa_interval_hours: int = 1
     scrape_nvd_interval_hours: int = 4
     scrape_vendor_interval_hours: int = 12
+    # Agent sources are the product's primary feed, so they rescan more
+    # often than the generic vendor feeds (local/Docker scheduler only; in
+    # production the cadence comes from Vercel Cron + GitHub Actions).
+    scrape_agent_interval_hours: int = 6
 
 
 @lru_cache

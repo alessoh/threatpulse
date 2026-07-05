@@ -68,11 +68,22 @@ def cron_scrape_all(db: Session = Depends(get_db)):
 
 @router.get("/cron/scrape-agents", dependencies=[Depends(verify_cron_secret)])
 def cron_scrape_agents(db: Session = Depends(get_db)):
-    """Agent-threat collectors only. Not scheduled by default; add it to
-    vercel.json crons for a more frequent agent-focused cadence (Pro plan)."""
+    """Agent-threat collectors only, plus a refresh of the daily insight so
+    the briefing reflects newly found agent threats. Triggered every 6 hours
+    by the GitHub Actions workflow .github/workflows/agent-scrape.yml (the
+    06:00 UTC slot is covered by Vercel's daily scrape-all)."""
     from app.scrapers.agent_collectors import run_agent_scrapers
+    from app.services.insight_service import get_or_create_daily_insight
 
-    return {"status": "ok", "new_threats": _safe(lambda: run_agent_scrapers(db))}
+    new_threats = _safe(lambda: run_agent_scrapers(db))
+    insight = None
+    if isinstance(new_threats, int) and new_threats > 0:
+        insight = _safe(lambda: get_or_create_daily_insight(db, force=True))
+    return {
+        "status": "ok",
+        "new_threats": new_threats,
+        "daily_insight": "refreshed" if getattr(insight, "content", None) else "unchanged",
+    }
 
 
 @router.get("/cron/weekly-digest", dependencies=[Depends(verify_cron_secret)])

@@ -1,0 +1,36 @@
+# Faster cadence for the agent-threat collectors (Phase 2 of the
+# agent-first pivot). Vercel Cron on the Hobby plan only allows daily
+# schedules, so this workflow triggers the agent-only cron endpoint three
+# extra times a day; the 06:00 UTC slot is already covered by Vercel's
+# daily /api/cron/scrape-all run.
+#
+# Setup (one time): repo Settings -> Secrets and variables -> Actions ->
+# New repository secret, name CRON_SECRET, value = the backend project's
+# CRON_SECRET env var on Vercel. Until that secret is set, runs no-op
+# politely instead of failing.
+name: Agent-threat scrape
+
+on:
+  schedule:
+    - cron: "0 0,12,18 * * *"  # 06:00 UTC handled by Vercel scrape-all
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  scrape-agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger agent collectors
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET repository secret is not set; skipping."
+            echo "See docs/DEPLOY_VERCEL.md (Step 5) to enable the faster agent cadence."
+            exit 0
+          fi
+          curl --fail-with-body -sS --max-time 290 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://api.threatpulse.dev/api/cron/scrape-agents

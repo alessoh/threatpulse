@@ -26,6 +26,7 @@ invoked with: python -m app.scrapers.agent_collectors --seed
 
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -49,27 +50,39 @@ WATCHED_PACKAGES = {
         "langchain", "langchain-core", "langgraph", "llama-index",
         "crewai", "autogen-agentchat", "pyautogen", "mcp", "fastmcp",
         "openai-agents", "semantic-kernel", "smolagents",
+        "langflow", "litellm", "gradio", "browser-use",
     ],
     "npm": [
         "@modelcontextprotocol/sdk", "@modelcontextprotocol/inspector",
         "mcp-remote", "langchain", "@langchain/core", "@openai/agents",
+        "flowise", "n8n",
     ],
 }
 
+# Each keyword is one NVD request per run (rate-limit sleep between them:
+# 7s unauthenticated, 2s with NVD_API_KEY set), so add sparingly.
 NVD_AGENT_KEYWORDS = [
     "model context protocol",
     "prompt injection",
     "LLM agent",
+    "AI agent",
+    "MCP server",
     "langchain",
+    "langflow",
     "llama index",
     "autogen",
 ]
 
 # Verify each feed URL once before first production run; publishers move them.
+# Broad feeds are safe to add: entries are filtered on AGENT_SIGNAL_TERMS
+# before any AI call, so off-topic posts cost nothing.
 AGENT_RSS_FEEDS = {
     "Simon Willison": "https://simonwillison.net/atom/everything/",
     "Embrace The Red": "https://embracethered.com/blog/index.xml",
     "OWASP GenAI Security": "https://genai.owasp.org/feed/",
+    "Unit 42": "https://unit42.paloaltonetworks.com/feed/",
+    "PortSwigger Research": "https://portswigger.net/research/rss",
+    "Schneier on Security": "https://www.schneier.com/feed/atom/",
 }
 
 ARXIV_QUERY = (
@@ -375,6 +388,39 @@ AGENT_SIGNAL_TERMS = (
     "prompt injection", "mcp", "model context protocol", "agent", "a2a",
     "tool poisoning", "jailbreak", "exfiltrat", "langchain", "autogen",
 )
+
+
+# ═════════════════════════════════════════════════════════════════
+# Agent-relevance gate for the generic (conventional) collectors
+# ═════════════════════════════════════════════════════════════════
+
+# Stricter than AGENT_SIGNAL_TERMS, because these run against broad,
+# high-volume sources (CISA KEV, NVD, general security news) where loose
+# substrings like "agent" would mis-route half the feed ("user-agent",
+# "agentless EDR", ...). Matched on word boundaries.
+AGENT_GATE_TERMS = (
+    "ai agent", "ai agents", "llm agent", "llm agents", "autonomous agent",
+    "autonomous agents", "agentic", "prompt injection", "indirect prompt",
+    "model context protocol", "mcp server", "mcp servers", "mcp client",
+    "tool poisoning", "langchain", "langgraph", "autogen", "crewai",
+    "llamaindex", "llama index", "langflow", "flowise", "browser-use",
+    "github copilot", "claude code", "openai codex",
+)
+
+_GATE_RE = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in AGENT_GATE_TERMS) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def is_agent_relevant(text: str) -> bool:
+    """True when generic-source text signals an AI-agent security angle.
+
+    Used by collectors.py to route conventional feed items through the
+    agent-taxonomy synthesis instead, so agent-relevant CVEs and news land
+    in the primary agent feed no matter which scraper found them first.
+    """
+    return bool(_GATE_RE.search(text or ""))
 
 
 def scrape_agent_rss(db: Session, feed_url: str, source_name: str,

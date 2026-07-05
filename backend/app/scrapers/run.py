@@ -108,7 +108,7 @@ if __name__ == "__main__":
         scheduler.add_job(run_cisa, "interval", hours=settings.scrape_cisa_interval_hours, id="cisa")
         scheduler.add_job(run_nvd, "interval", hours=settings.scrape_nvd_interval_hours, id="nvd")
         scheduler.add_job(run_rss, "interval", hours=settings.scrape_vendor_interval_hours, id="rss")
-        scheduler.add_job(run_agents, "interval", hours=settings.scrape_vendor_interval_hours, id="agents")
+        scheduler.add_job(run_agents, "interval", hours=settings.scrape_agent_interval_hours, id="agents")
         scheduler.start()
     else:
         run_once()
