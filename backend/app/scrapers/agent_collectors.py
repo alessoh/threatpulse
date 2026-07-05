@@ -230,10 +230,18 @@ def _recent_iso(value: str, days: int) -> bool:
 # 1. GitHub Security Advisories for watched agent packages
 # ═════════════════════════════════════════════════════════════════
 
-def scrape_github_advisories(db: Session, days: int = 14) -> int:
-    """Pull recent GHSA advisories affecting watched agent frameworks."""
+def scrape_github_advisories(db: Session, days: int = 14, limit: int = 10) -> int:
+    """Pull recent GHSA advisories affecting watched agent frameworks.
+
+    `limit` caps new (not-yet-ingested) items synthesized across ALL
+    ecosystems combined, so a large backlog after adding new watched
+    packages can't alone exhaust the cron function's time budget. Dedup
+    runs before synthesis, so a capped run always makes forward progress
+    and the next run picks up the rest.
+    """
     new_count = 0
     found = 0
+    processed = 0
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -261,6 +269,9 @@ def scrape_github_advisories(db: Session, days: int = 14) -> int:
                 ident = cve or ghsa
                 if already_ingested(db, identifier=ident, source_url=link):
                     continue
+                if processed >= limit:
+                    continue
+                processed += 1
                 vulns = adv.get("vulnerabilities") or []
                 pkgs = ", ".join(
                     f"{(v.get('package') or {}).get('name', '?')} "
@@ -290,10 +301,18 @@ def scrape_github_advisories(db: Session, days: int = 14) -> int:
 # 2. NVD keyword search for agent-related CVEs
 # ═════════════════════════════════════════════════════════════════
 
-def scrape_nvd_agent_cves(db: Session, days: int = 3) -> int:
-    """Search NVD for recently published CVEs matching agent keywords."""
+def scrape_nvd_agent_cves(db: Session, days: int = 3, limit: int = 8) -> int:
+    """Search NVD for recently published CVEs matching agent keywords.
+
+    `limit` caps new (not-yet-ingested) CVEs synthesized across ALL
+    keywords combined, so a backlog after adding new keywords can't alone
+    exhaust the cron function's time budget alongside the fixed per-keyword
+    rate-limit sleep below. Dedup runs before synthesis, so a capped run
+    always makes forward progress and the next run picks up the rest.
+    """
     new_count = 0
     found = 0
+    processed = 0
     start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
         "%Y-%m-%dT00:00:00.000")
     end = datetime.now(timezone.utc).strftime("%Y-%m-%dT23:59:59.999")
@@ -318,6 +337,9 @@ def scrape_nvd_agent_cves(db: Session, days: int = 3) -> int:
                 link = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
                 if already_ingested(db, identifier=cve_id, source_url=link):
                     continue
+                if processed >= limit:
+                    continue
+                processed += 1
                 descs = cve.get("descriptions", [])
                 desc = next((d["value"] for d in descs
                              if d.get("lang") == "en"), "")

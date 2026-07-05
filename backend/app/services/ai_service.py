@@ -37,6 +37,36 @@ def _model_name() -> str:
     return getattr(get_settings(), "anthropic_model", None) or DEFAULT_MODEL
 
 
+# claude-sonnet-5 runs "adaptive thinking" by default when the thinking
+# parameter is omitted. That changed two things under us: responses can lead
+# with a thinking block instead of text (the pinned anthropic SDK, 0.37.0,
+# predates thinking blocks and parses them with text=None), and thinking
+# tokens count against max_tokens. Disabling it restores the pre-Sonnet-5
+# behavior these short structured calls were built for. Sent via extra_body
+# because SDK 0.37.0 has no `thinking` kwarg. If ANTHROPIC_MODEL is ever set
+# to a model that rejects explicit disabled (e.g. claude-fable-5), remove it.
+THINKING_OFF = {"thinking": {"type": "disabled"}}
+
+
+def _response_text(response) -> str:
+    """Extract the text from a Messages response, tolerating non-text blocks.
+
+    Never assume content[0] is text: models may emit thinking or other block
+    types first. Joins all text blocks and skips anything without usable text.
+    """
+    parts = [
+        block.text
+        for block in (response.content or [])
+        if getattr(block, "type", "") == "text" and getattr(block, "text", None)
+    ]
+    if not parts:
+        raise ValueError(
+            f"Model response contained no text blocks (stop_reason="
+            f"{getattr(response, 'stop_reason', None)!r})"
+        )
+    return "".join(parts)
+
+
 # ═════════════════════════════════════════════════════════════════
 # Agentic threat taxonomy
 # ═════════════════════════════════════════════════════════════════
@@ -199,9 +229,10 @@ def _call_for_json(system: str, prompt: str, max_tokens: int = 2000) -> dict:
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": attempt_prompt}],
+            extra_body=THINKING_OFF,
         )
-        text = response.content[0].text
         try:
+            text = _response_text(response)
             return _extract_json(text)
         except (json.JSONDecodeError, ValueError) as exc:
             last_error = exc
@@ -418,8 +449,9 @@ def advisor_chat(message: str, threat_context: Optional[str] = None,
         max_tokens=600,
         system=system,
         messages=messages,
+        extra_body=THINKING_OFF,
     )
-    return response.content[0].text
+    return _response_text(response)
 
 
 def generate_weekly_digest(threats: list) -> str:
@@ -451,5 +483,6 @@ def generate_weekly_digest(threats: list) -> str:
                   "under 300 words. Be direct and actionable."
             ),
         }],
+        extra_body=THINKING_OFF,
     )
-    return response.content[0].text
+    return _response_text(response)
