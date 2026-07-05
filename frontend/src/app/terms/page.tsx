@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: "Terms of Service — ThreatPulse",
@@ -9,7 +10,8 @@ export const metadata: Metadata = {
 const EFFECTIVE_DATE = "July 7, 2026";
 
 // Each section is a heading plus one or more paragraphs, rendered in order.
-const SECTIONS: { title: string; body: string[] }[] = [
+// Paragraphs are ReactNode so a section (e.g. Contact) can embed a link.
+const SECTIONS: { title: string; body: ReactNode[] }[] = [
   {
     title: "1. Service Description",
     body: [
@@ -69,7 +71,7 @@ const SECTIONS: { title: string; body: string[] }[] = [
       "ThreatPulse collects the minimum information necessary to provide the service, including your email address, subscription tier, and any profile preferences you voluntarily provide (such as industry and technology stack selections used to filter threat alerts).",
       "We do not sell your personal information to third parties. We do not share your information with third parties except as necessary to process payments (through our payment processor) and send email notifications (through our email service provider).",
       "If you use the AI Threat Advisor feature with your own API key, your API key is processed entirely within your browser and is not transmitted to or stored by ThreatPulse servers.",
-      "For complete privacy practices, see our Privacy Policy below.",
+      "The practices described in this Data and Privacy section reflect how ThreatPulse handles your information.",
     ],
   },
   {
@@ -82,7 +84,7 @@ const SECTIONS: { title: string; body: string[] }[] = [
   {
     title: "11. Governing Law",
     body: [
-      "These terms shall be governed by and construed in accordance with the laws of the State of California, without regard to its conflict of law provisions. Any disputes arising from these terms or your use of the platform shall be resolved in the courts of California,",
+      "These terms shall be governed by and construed in accordance with the laws of the State of California, without regard to its conflict of law provisions. Any disputes arising from these terms or your use of the platform shall be resolved in the state and federal courts located in California.",
     ],
   },
   {
@@ -93,7 +95,18 @@ const SECTIONS: { title: string; body: string[] }[] = [
   },
   {
     title: "13. Contact",
-    body: ["For questions about these terms, contact this site."],
+    body: [
+      <>
+        For questions about these terms, contact us at{" "}
+        <a
+          href="mailto:hpalesso91@gmail.com"
+          className="text-blue-600 hover:underline"
+        >
+          hpalesso91@gmail.com
+        </a>
+        .
+      </>,
+    ],
   },
 ];
 
