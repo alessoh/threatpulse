@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Terms of Service — ThreatPulse",
   description:
     "ThreatPulse Terms of Service: service description, disclaimers, limitation of liability, subscriptions, data and privacy, and governing law.",
+  alternates: { canonical: "/terms" },
 };
 
 const EFFECTIVE_DATE = "July 7, 2026";
