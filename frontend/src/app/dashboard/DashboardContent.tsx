@@ -98,7 +98,7 @@ export default function DashboardPage() {
                     <p><span className="font-mono text-[9px] uppercase tracking-wider text-purple-600">Type:</span> {typeLabel(t.threat_type)}</p>
                     <p><span className="font-mono text-[9px] uppercase tracking-wider text-purple-600">Tags:</span> {t.tags.split(",").filter(Boolean).map((tag) => formatTag(tag)).join(" · ")}</p>
                     {t.cvss_score && <p><span className="font-mono text-[9px] uppercase tracking-wider text-purple-600">CVSS:</span> {t.cvss_score}</p>}
-                    <Link href={`/library?search=${encodeURIComponent(t.name)}`} className="inline-block mt-2 text-purple-600 font-semibold hover:underline">
+                    <Link href={`/threats/${t.slug}`} className="inline-block mt-2 text-purple-600 font-semibold hover:underline">
                       View full profile →
                     </Link>
                   </div>
@@ -119,7 +119,7 @@ export default function DashboardPage() {
             {watchlist.map((t) => (
               <div key={t.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
                 <span className={`text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${sevStyle[t.severity]}`}>{t.severity}</span>
-                <Link href={`/library?search=${encodeURIComponent(t.name)}`} className="text-xs font-medium text-gray-700 hover:text-blue-600 truncate flex-1">
+                <Link href={`/threats/${t.slug}`} className="text-xs font-medium text-gray-700 hover:text-blue-600 truncate flex-1">
                   {t.name}
                 </Link>
                 <span className="text-[10px] font-mono text-gray-400 shrink-0">{typeLabel(t.threat_type)}</span>
