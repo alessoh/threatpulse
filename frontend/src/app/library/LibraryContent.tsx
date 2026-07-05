@@ -139,7 +139,13 @@ export default function LibraryContent() {
               <div className={`w-1 self-stretch rounded-full ${sevBar[t.severity]}`} />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="font-semibold">{t.name}</span>
+                  <Link
+                    href={`/threats/${t.slug}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-semibold hover:text-blue-600 hover:underline"
+                  >
+                    {t.name}
+                  </Link>
                   <span className={`text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${sevStyle[t.severity]}`}>{t.severity}</span>
                   {t.category === "agent" && (
                     <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border bg-purple-50 text-purple-600 border-purple-200">Agent</span>
@@ -161,9 +167,14 @@ export default function LibraryContent() {
                   <span className="font-mono text-[9px] uppercase tracking-wider text-blue-600 mr-2">Type:</span>{typeLabel(t.threat_type)}
                   {t.cvss_score && <> · <span className="font-mono text-[9px] uppercase tracking-wider text-blue-600 mr-2">CVSS:</span>{t.cvss_score}</>}
                 </p>
-                <Link href={`/playbook/${t.slug}`} className="inline-block text-sm text-blue-600 font-semibold hover:underline">
-                  View Full Playbook →
-                </Link>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <Link href={`/threats/${t.slug}`} className="inline-block text-sm text-purple-600 font-semibold hover:underline">
+                    View Full Profile →
+                  </Link>
+                  <Link href={`/playbook/${t.slug}`} className="inline-block text-sm text-blue-600 font-semibold hover:underline">
+                    View Full Playbook →
+                  </Link>
+                </div>
               </div>
             )}
           </div>
